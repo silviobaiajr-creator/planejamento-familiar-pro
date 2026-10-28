@@ -210,8 +210,8 @@
     extraItems: [], // [ { id, week, nome, categoria, qtd, preco, checked } ]
     pendingCarriedItems: [],
     completedTurnovers: {}, // { [week]: { timestamp, formattedDate, nextWeek } }
-    firstDayOfWeek: 'Segunda', // 'Segunda' | 'Terça' | 'Quarta' | 'Quinta' | 'Sexta' | 'Sábado' | 'Domingo'
-    cycleStartDate: '2026-11-02', // Data YYYY-MM-DD em que inicia a Semana 1
+    firstDayOfWeek: 'Sábado', // 'Segunda' | 'Terça' | 'Quarta' | 'Quinta' | 'Sexta' | 'Sábado' | 'Domingo'
+    cycleStartDate: '2026-10-31', // Data YYYY-MM-DD em que inicia a Semana 1
     currentCycleNumber: 1,
     cycleHistory: [],
     dishNames: {}, // { [`${week}_${day}_${meal}`]: string }
@@ -224,11 +224,46 @@
   };
 
   // --- INITIALIZATION ---
+  
+  // Auto-hidratação segura do Supabase ao iniciar o app (para recuperar ciclo, nomes e alterações caso o navegador troque de origem/cache)
+  async function hydrateFromSupabaseOnStartup() {
+    try {
+      const cfg = state.supabaseConfig;
+      if (!cfg?.url || !cfg?.key) return;
+      const cleanUrl = cfg.url.replace(/\/+$/, '');
+      const res = await fetch(`${cleanUrl}/rest/v1/planejamento_familiar_state?id=eq.default&select=*`, {
+        headers: {
+          'apikey': cfg.key,
+          'Authorization': `Bearer ${cfg.key}`
+        }
+      });
+      if (res.ok) {
+        const rows = await res.json();
+        if (rows.length > 0 && rows[0].state) {
+          const remote = rows[0].state;
+          const remoteHasDishNames = remote.dishNames && Object.keys(remote.dishNames).length > 0;
+          const localHasDishNames = state.dishNames && Object.keys(state.dishNames).length > 0;
+          const remoteHasCustomCycle = remote.firstDayOfWeek === 'Sábado' || (remote.cycleStartDate && remote.cycleStartDate !== '2026-11-02');
+          
+          if ((remoteHasDishNames && !localHasDishNames) || (remoteHasCustomCycle && state.firstDayOfWeek !== 'Sábado')) {
+            console.log('Restaurando dados e configurações da nuvem Supabase...');
+            state = { ...state, ...remote };
+            saveState();
+            renderApp();
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Auto-hidratação silenciosa do Supabase indisponível no momento:', e);
+    }
+  }
+
   function initApp() {
     loadState();
     registerServiceWorker();
     setupEventListeners();
     renderApp();
+    hydrateFromSupabaseOnStartup();
   }
 
   function loadState() {
@@ -238,7 +273,7 @@
         try { localStorage.removeItem(k); } catch (e) {}
       });
 
-      let saved = localStorage.getItem(STORAGE_KEY);
+      let saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('planejamento_familiar_pro_backup');
       if (!saved) {
         const v10Saved = localStorage.getItem('planejamento_familiar_pro_v13') || localStorage.getItem('planejamento_familiar_pro_v12') || localStorage.getItem('planejamento_familiar_pro_v11') || localStorage.getItem('planejamento_familiar_pro_v10') || localStorage.getItem('planejamento_familiar_pro_v9');
         if (v10Saved) {
@@ -324,16 +359,14 @@
     if (!state.menuByWeek) state.menuByWeek = {};
       if (!state.completedTurnovers) state.completedTurnovers = {};
     state.showProjection = false;
-      if (!state.firstDayOfWeek) state.firstDayOfWeek = 'Segunda';
-      if (!state.cycleStartDate) state.cycleStartDate = '2026-11-02';
+      if (!state.firstDayOfWeek) state.firstDayOfWeek = 'Sábado';
+      if (!state.cycleStartDate) state.cycleStartDate = '2026-10-31';
       const base = (Array.isArray(state.menuItems) && state.menuItems.length > 0) ? state.menuItems : (window.INITIAL_SEED_DATA?.menu_items || []);
       for (let w = 1; w <= 5; w++) {
         if (!Array.isArray(state.menuByWeek[w]) || state.menuByWeek[w].length === 0) {
           state.menuByWeek[w] = JSON.parse(JSON.stringify(base));
         }
       }
-
-      saveState();
     } catch (e) {
       console.error('Erro ao carregar estado do LocalStorage:', e);
       if (window.INITIAL_SEED_DATA) {
@@ -354,7 +387,9 @@
 
   function saveState() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      const stateJson = JSON.stringify(state);
+      localStorage.setItem(STORAGE_KEY, stateJson);
+      try { localStorage.setItem('planejamento_familiar_pro_backup', stateJson); } catch (e) {}
       if (state.supabaseConfig?.autoSync && state.supabaseConfig.url && state.supabaseConfig.key) {
         syncWithSupabaseSilent();
       }
@@ -552,10 +587,7 @@
       for (let w = 1; w <= 5; w++) {
         const consumoSemanal = Math.round((consumptionsByWeek[w][name] || 0) * 100) / 100;
 
-        // Se houver ajuste manual e estiver em modo projeção:
-        if (isProjection && state.pantryAdjustments[`w${w}_${name}`] !== undefined) {
-          estoqueDisponivel = state.pantryAdjustments[`w${w}_${name}`];
-        }
+
 
         const falta = Math.max(0, consumoSemanal - estoqueDisponivel);
         let qtdComprar = 0;

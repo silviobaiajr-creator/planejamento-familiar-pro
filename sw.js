@@ -1,11 +1,11 @@
 // Service Worker for Planejamento Familiar Pro PWA
-const CACHE_NAME = 'planejamento-familiar-v14';
+const CACHE_NAME = 'planejamento-familiar-v16';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './styles.css?v=14',
-  './seed_data.js?v=14',
-  './app.js?v=14',
+  './styles.css?v=16',
+  './seed_data.js?v=16',
+  './app.js?v=16',
   './manifest.json'
 ];
 

@@ -2515,18 +2515,6 @@
       "custo": 1.5
     },
     {
-      "id": "menu_144",
-      "dia_cod": "Dia 6",
-      "dia_nome": "Sábado",
-      "refeicao": "Lanche da Tarde",
-      "ingrediente_nome": "Filé de Peito Frango",
-      "porcao_pessoa": 50.0,
-      "medida": "g",
-      "qtd_total_familia": 150.0,
-      "medida_caseira_str": "1,3 filé(s) grande(s)",
-      "custo": 2.51
-    },
-    {
       "id": "menu_145",
       "dia_cod": "Dia 6",
       "dia_nome": "Sábado",
