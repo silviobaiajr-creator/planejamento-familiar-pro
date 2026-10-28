@@ -3,9 +3,7 @@
   "version": "1.0.0",
   "description": "Web App Planejamento Familiar Pro - Cardápio Semanal, Medida da Panela e Compras de 5 Semanas",
   "scripts": {
-    "build": "echo 'Static PWA ready'",
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node server.js"
   },
   "keywords": [
     "planejamento-familiar",
