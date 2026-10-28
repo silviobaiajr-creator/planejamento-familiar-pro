@@ -1205,38 +1205,59 @@
 
             return `
               <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
-                <div class="p-3.5 sm:p-4 bg-slate-800/70 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2.5">
-                  <div class="flex items-center gap-2 flex-wrap min-w-0 flex-1">
-                    <span class="font-black text-base sm:text-lg text-white whitespace-nowrap">
-                      ${activeMeal}
-                    </span>
-                    ${dishName ? `
-                      <button onclick="window.app.openEditDishNameModal('${state.activeWeek}', '${state.activeDay}', '${activeMeal}')"
-                              class="text-xs sm:text-sm px-3 py-1 rounded-xl bg-emerald-950/80 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-600/50 font-bold flex items-center gap-1.5 transition text-left active:scale-95 shadow-sm max-w-[280px] xs:max-w-xs sm:max-w-md md:max-w-lg"
-                              title="Clique para editar o nome do prato">
-                        <span>🍽️</span>
-                        <span class="truncate">${dishName}</span>
-                        <span class="text-[11px] opacity-75">✏️</span>
+                <div class="p-3.5 sm:p-4 bg-slate-800/70 border-b border-slate-800 space-y-3">
+                  <!-- Linha 1: Nome da Refeição, Custo Total e Botões de Ação -->
+                  <div class="flex items-center justify-between gap-2 flex-wrap">
+                    <div class="flex items-center gap-2">
+                      <span class="font-black text-lg sm:text-xl text-white">
+                        ${activeMeal}
+                      </span>
+                      <span class="text-xs sm:text-sm font-extrabold text-emerald-400 bg-emerald-950/70 px-2.5 py-0.5 rounded-lg border border-emerald-600/30">
+                        R$ ${mealCost.toFixed(2).replace('.', ',')}
+                      </span>
+                    </div>
+
+                    <div class="flex items-center space-x-2">
+                      <button onclick="window.app.openAddMealItemModal('${state.activeDay}', '${activeMeal}', ${state.activeWeek})"
+                              class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition shadow-sm flex items-center gap-1">
+                        <span>+</span> <span>Item</span>
                       </button>
-                    ` : `
-                      <button onclick="window.app.openEditDishNameModal('${state.activeWeek}', '${state.activeDay}', '${activeMeal}')"
-                              class="text-xs text-slate-400 hover:text-emerald-300 flex items-center gap-1 px-2.5 py-1 rounded-xl border border-dashed border-slate-700 hover:border-emerald-500/50 transition active:scale-95"
-                              title="Clique para dar um nome ao prato">
-                        <span>🍽️</span> <span>+ Nome do prato</span> <span class="text-[10px]">✏️</span>
+                      <button onclick="window.app.duplicateSingleMeal('${state.activeDay}', '${activeMeal}', ${state.activeWeek})"
+                              class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 text-xs font-semibold px-2.5 py-1.5 rounded-xl border border-slate-700 transition">
+                        Copiar Refeição
                       </button>
-                    `}
+                    </div>
                   </div>
 
-                  <div class="flex items-center space-x-2 sm:space-x-3 shrink-0">
-                    <span class="text-sm font-extrabold text-emerald-400">R$ ${mealCost.toFixed(2).replace('.', ',')}</span>
-                    <button onclick="window.app.openAddMealItemModal('${state.activeDay}', '${activeMeal}', ${state.activeWeek})"
-                            class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition shadow-sm flex items-center gap-1">
-                      <span>+</span> <span>Item</span>
-                    </button>
-                    <button onclick="window.app.duplicateSingleMeal('${state.activeDay}', '${activeMeal}', ${state.activeWeek})"
-                            class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 text-xs font-semibold px-2.5 py-1.5 rounded-xl border border-slate-700 transition">
-                      Copiar Refeição
-                    </button>
+                  <!-- Linha 2: Barra 100% de Largura para o Nome Completo do Prato (Sem sobreposição) -->
+                  <div>
+                    ${dishName ? `
+                      <div onclick="window.app.openEditDishNameModal('${state.activeWeek}', '${state.activeDay}', '${activeMeal}')"
+                           class="w-full bg-emerald-950/50 hover:bg-emerald-900/60 border border-emerald-600/40 rounded-xl p-2.5 px-3 flex items-center justify-between gap-2.5 cursor-pointer transition active:scale-[0.99] shadow-inner group">
+                        <div class="flex items-center gap-2 min-w-0 flex-1">
+                          <span class="text-base shrink-0">🍽️</span>
+                          <div class="min-w-0 flex-1">
+                            <span class="text-[10px] uppercase font-bold text-emerald-400 block tracking-wider leading-none">Prato Definido</span>
+                            <span class="text-xs sm:text-sm font-extrabold text-white group-hover:text-emerald-200 transition break-words block mt-0.5">
+                              ${dishName}
+                            </span>
+                          </div>
+                        </div>
+                        <span class="text-xs text-emerald-400/80 group-hover:text-emerald-300 shrink-0 bg-emerald-900/40 p-1 rounded-lg border border-emerald-600/30" title="Editar nome do prato">
+                          ✏️
+                        </span>
+                      </div>
+                    ` : `
+                      <button onclick="window.app.openEditDishNameModal('${state.activeWeek}', '${state.activeDay}', '${activeMeal}')"
+                              class="w-full text-xs text-slate-400 hover:text-emerald-300 flex items-center justify-between p-2.5 px-3 rounded-xl border border-dashed border-slate-700 hover:border-emerald-500/50 bg-slate-900/40 hover:bg-slate-800/40 transition active:scale-[0.99]"
+                              title="Clique para dar um nome ao prato">
+                        <div class="flex items-center gap-2">
+                          <span>🍽️</span>
+                          <span class="font-medium">+ Toque aqui para definir o nome deste prato (ex: Frango com Quiabo)</span>
+                        </div>
+                        <span class="text-xs opacity-75">✏️</span>
+                      </button>
+                    `}
                   </div>
                 </div>
 
