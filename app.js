@@ -1047,7 +1047,7 @@
               <button onclick="window.app.openWeeklyMenuReportModal()"
                       class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 transition shadow-sm"
                       title="Visualizar e imprimir cardápio de segunda a domingo em PDF">
-                <span>🖨️</span> <span>Relatório / Imprimir PDF</span>
+                <span>🗓️</span> <span>Calendário de Parede (PDF)</span>
               </button>
               <button onclick="window.app.resetToOfficialMenu()"
                       class="px-3.5 py-2 rounded-xl bg-emerald-950/50 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-600/50 text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition shadow-sm"
@@ -5794,110 +5794,698 @@
   }
 
 
-  // --- RELATÓRIO DO CARDÁPIO SEMANAL EM PDF (SEGUNDA A DOMINGO) ---
-  window.__reportOrientation = 'portrait';
-  window.__reportWeek = 1;
+  // --- CALENDÁRIO SEMANAL DE PAREDE / MURAL EM A4 PAISAGEM (SEGUNDA A DOMINGO) ---
+  window.__calendarFormat = 'rows';
+  const WALL_MEAL_ICONS = {
+    'Café da Manhã': '☕',
+    'Almoço': '🍲',
+    'Lanche da Tarde': '🥪',
+    'Jantar': '🍽️'
+  }; // 'rows' (Mural de Parede) | 'cols' (Grade 7 Colunas) | 'detailed' (Tabela Completa)
+  window.__calendarWeek = 1;
 
-  function setReportOrientation(orientation) {
-    window.__reportOrientation = orientation;
-    updateReportOrientationStyles(orientation);
-    const container = document.getElementById('menu-report-printable-area');
-    if (container) {
-      container.className = `menu-report-wrapper ${orientation === 'landscape' ? 'print-landscape' : 'print-portrait'} p-4 sm:p-6 rounded-2xl border border-slate-700 bg-white shadow-2xl text-slate-900 overflow-x-auto`;
+  function generateWallCalendarDocumentHTML(week = state.activeWeek, format = window.__calendarFormat || 'rows') {
+    const weekNum = Number(week);
+    const summary = getMenuFinancialSummary(weekNum);
+    const weekItems = getActiveMenuItems(weekNum);
+    const days = getOrderedDaysOfWeek();
+    const familyCount = state.familyMembers || 3;
+    const cycleNum = state.currentCycleNumber || 1;
+
+    const mealIcons = {
+      'Café da Manhã': '☕',
+      'Almoço': '🍲',
+      'Lanche da Tarde': '🥪',
+      'Jantar': '🍽️'
+    };
+
+    let tableHtml = '';
+
+    if (format === 'cols') {
+      // Formato Grade 7 Colunas (Colunas = Dias, Linhas = Refeições)
+      tableHtml = `
+        <table class="wall-table wall-table-cols">
+          <thead>
+            <tr>
+              <th style="width: 10%;">REFEIÇÃO</th>
+              ${days.map(d => `<th style="width: 12.8%;">${d.toUpperCase()}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${MEALS_ORDER.map(meal => `
+              <tr>
+                <td class="cell-meal-head">
+                  <div class="meal-icon">${WALL_MEAL_ICONS[meal] || '🍴'}</div>
+                  <div class="meal-head-name">${meal}</div>
+                </td>
+                ${days.map(day => {
+                  const mItems = weekItems.filter(i => i.dia_nome === day && i.refeicao === meal);
+                  const mCost = mItems.reduce((acc, cur) => acc + (cur.custo || 0), 0);
+                  const dishKey = `${weekNum}_${day}_${meal}`;
+                  const dishName = state.dishNames?.[dishKey] || (meal === 'Almoço' ? 'Prato Principal' : meal);
+                  return `
+                    <td class="cell-meal">
+                      <div class="dish-badge">🍽️ ${dishName}</div>
+                      ${mItems.length === 0 ? `<div class="empty-note">Sem itens</div>` : `
+                        <ul class="ing-list-compact">
+                          ${mItems.map(item => `
+                            <li>
+                              <strong>${item.ingrediente_nome}</strong>:
+                              <span>${item.porcao_pessoa}${item.medida}</span>
+                              <span class="fam-qty">(${item.qtd_total_familia}${item.medida})</span>
+                            </li>
+                          `).join('')}
+                        </ul>
+                      `}
+                    </td>
+                  `;
+                }).join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    } else if (format === 'detailed') {
+      // Formato Detalhado em Tabelas (Com medidas caseiras e custos)
+      tableHtml = `
+        <div class="space-y-4">
+          ${days.map(day => {
+            const dayMeals = weekItems.filter(i => i.dia_nome === day);
+            const dayTotal = summary.dayTotals[day] || 0;
+            return `
+              <div class="day-detailed-card">
+                <div class="day-detailed-header">
+                  <span>${day.toUpperCase()}</span>
+                  <span>Custo do Dia: R$ ${dayTotal.toFixed(2).replace('.', ',')}</span>
+                </div>
+                <div class="day-detailed-grid">
+                  ${MEALS_ORDER.map(meal => {
+                    const mItems = dayMeals.filter(i => i.refeicao === meal);
+                    const mCost = mItems.reduce((acc, cur) => acc + (cur.custo || 0), 0);
+                    const dishKey = `${weekNum}_${day}_${meal}`;
+                    const dishName = state.dishNames?.[dishKey] || (meal === 'Almoço' ? 'Prato Principal' : meal);
+                    return `
+                      <div class="detailed-meal-box">
+                        <div class="detailed-meal-header">
+                          <div>
+                            <strong>${WALL_MEAL_ICONS[meal] || '🍴'} ${meal}</strong>
+                            <span class="dish-sub">${dishName}</span>
+                          </div>
+                          <span class="cost-tag">R$ ${mCost.toFixed(2).replace('.', ',')}</span>
+                        </div>
+                        <table class="report-table">
+                          <thead>
+                            <tr>
+                              <th>Ingrediente</th>
+                              <th style="text-align:center;">Porção</th>
+                              <th style="text-align:center;">Família (${familyCount}p)</th>
+                              <th>Panela</th>
+                              <th style="text-align:right;">Custo</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            ${mItems.map(item => `
+                              <tr>
+                                <td><strong>${item.ingrediente_nome}</strong></td>
+                                <td style="text-align:center;">${item.porcao_pessoa}${item.medida}</td>
+                                <td style="text-align:center; font-weight:bold; color:#047857;">${item.qtd_total_familia}${item.medida}</td>
+                                <td style="color:#475569;">${item.medida_caseira_str || '-'}</td>
+                                <td style="text-align:right; font-weight:bold;">R$ ${(item.custo || 0).toFixed(2).replace('.', ',')}</td>
+                              </tr>
+                            `).join('')}
+                          </tbody>
+                        </table>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    } else {
+      // Formato Padrão: MURAL DE PAREDE (Linhas = Dias da Semana, Colunas = 4 Refeições)
+      // Ideal para fixar na parede ou geladeira, 100% legível em folha A4 Paisagem!
+      tableHtml = `
+        <table class="wall-table">
+          <thead>
+            <tr>
+              <th style="width: 10%;">DIA</th>
+              <th style="width: 22.5%;">☕ CAFÉ DA MANHÃ</th>
+              <th style="width: 22.5%;">🍲 ALMOÇO</th>
+              <th style="width: 22.5%;">🥪 LANCHE DA TARDE</th>
+              <th style="width: 22.5%;">🍽️ JANTAR</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${days.map(day => {
+              const dayItems = weekItems.filter(i => i.dia_nome === day);
+              const dayCost = dayItems.reduce((acc, cur) => acc + (cur.custo || 0), 0);
+              return `
+                <tr>
+                  <td class="cell-day">
+                    <div class="day-name">${day.toUpperCase()}</div>
+                    <div class="day-cost">R$ ${dayCost.toFixed(2).replace('.', ',')}</div>
+                  </td>
+                  ${MEALS_ORDER.map(meal => {
+                    const mItems = dayItems.filter(i => i.refeicao === meal);
+                    const mCost = mItems.reduce((acc, cur) => acc + (cur.custo || 0), 0);
+                    const dishKey = `${weekNum}_${day}_${meal}`;
+                    const dishName = state.dishNames?.[dishKey] || (meal === 'Almoço' ? 'Prato Principal' : meal);
+                    return `
+                      <td class="cell-meal">
+                        <div class="meal-head">
+                          <span class="dish-title">🍽️ ${dishName}</span>
+                          <span class="meal-cost">R$ ${mCost.toFixed(2).replace('.', ',')}</span>
+                        </div>
+                        ${mItems.length === 0 ? `<div class="empty-note">Livre / Sem itens</div>` : `
+                          <ul class="ing-list">
+                            ${mItems.map(item => `
+                              <li>
+                                <span class="ing-name"><strong>${item.ingrediente_nome}</strong>:</span>
+                                <span class="qty">${item.porcao_pessoa}${item.medida}</span>
+                                <span class="fam-qty">(${item.qtd_total_familia}${item.medida} fam.)</span>
+                                ${item.medida_caseira_str && item.medida_caseira_str !== '-' ? `<span class="panela-note">• ${item.medida_caseira_str}</span>` : ''}
+                              </li>
+                            `).join('')}
+                          </ul>
+                        `}
+                      </td>
+                    `;
+                  }).join('')}
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
     }
-    const btnPortrait = document.getElementById('btn-report-portrait');
-    const btnLandscape = document.getElementById('btn-report-landscape');
-    if (btnPortrait && btnLandscape) {
-      if (orientation === 'portrait') {
-        btnPortrait.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition bg-emerald-600 text-white shadow-sm';
-        btnLandscape.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition bg-transparent text-slate-400 hover:text-white';
-      } else {
-        btnPortrait.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition bg-transparent text-slate-400 hover:text-white';
-        btnLandscape.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition bg-emerald-600 text-white shadow-sm';
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cardápio Semanal de Parede - Semana ${weekNum} - Planejamento Familiar Pro</title>
+  <style>
+    @page {
+      size: landscape;
+      margin: 5mm 8mm;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background-color: #ffffff !important;
+      color: #0f172a !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .print-bar {
+      background: #0f172a;
+      color: #ffffff;
+      padding: 10px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    }
+    .print-btn {
+      background: #10b981;
+      color: #ffffff;
+      border: none;
+      font-weight: 800;
+      font-size: 13px;
+      padding: 9px 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+    }
+    .print-btn:active {
+      transform: scale(0.98);
+    }
+    .close-btn {
+      background: #334155;
+      color: #ffffff;
+      border: none;
+      font-weight: 600;
+      font-size: 13px;
+      padding: 9px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .page-sheet {
+      padding: 10px 14px;
+      max-width: 1500px;
+      margin: 0 auto;
+      background: #ffffff;
+    }
+    @media print {
+      .no-print {
+        display: none !important;
+      }
+      .page-sheet {
+        padding: 0 !important;
+        max-width: 100% !important;
       }
     }
+    .cal-header {
+      border-bottom: 2.5px solid #0f172a;
+      padding-bottom: 5px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+    .cal-title h1 {
+      margin: 0;
+      font-size: 15pt;
+      font-weight: 900;
+      color: #0f172a;
+      letter-spacing: -0.02em;
+    }
+    .cal-title p {
+      margin: 2px 0 0 0;
+      font-size: 8.5pt;
+      font-weight: 700;
+      color: #475569;
+    }
+    .cal-meta {
+      display: flex;
+      gap: 8px;
+    }
+    .cal-badge {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 8pt;
+      text-align: right;
+    }
+    .cal-badge strong {
+      display: block;
+      font-size: 9pt;
+      color: #047857;
+    }
+
+    /* Tabela do Calendário Mural */
+    .wall-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: 7.8pt;
+      border: 2px solid #0f172a;
+    }
+    .wall-table th {
+      background-color: #0f172a;
+      color: #ffffff;
+      padding: 5px 4px;
+      font-weight: 900;
+      font-size: 8.5pt;
+      text-align: center;
+      border: 1px solid #0f172a;
+      letter-spacing: 0.03em;
+    }
+    .wall-table td {
+      border: 1px solid #94a3b8;
+      vertical-align: top;
+      padding: 3.5px 5px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .wall-table tr:nth-child(even) td:not(.cell-day) {
+      background-color: #fbfcfd;
+    }
+    .cell-day {
+      background-color: #f1f5f9 !important;
+      text-align: center;
+      vertical-align: middle !important;
+    }
+    .day-name {
+      font-size: 9.5pt;
+      color: #0f172a;
+      text-transform: uppercase;
+      font-weight: 900;
+      letter-spacing: 0.02em;
+    }
+    .day-cost {
+      font-size: 8pt;
+      color: #047857;
+      font-weight: 800;
+      margin-top: 2px;
+    }
+    .cell-meal-head {
+      background-color: #f1f5f9 !important;
+      text-align: center;
+      vertical-align: middle !important;
+    }
+    .meal-icon {
+      font-size: 16pt;
+    }
+    .meal-head-name {
+      font-size: 8.5pt;
+      font-weight: 900;
+      color: #0f172a;
+      margin-top: 2px;
+    }
+    .meal-head {
+      background: #e2e8f0;
+      border-radius: 4px;
+      padding: 2px 4px;
+      margin-bottom: 3px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .dish-title {
+      font-weight: 900;
+      font-size: 8pt;
+      color: #0f172a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 80%;
+    }
+    .dish-title-sm {
+      font-weight: 800;
+      font-size: 7.5pt;
+      color: #0f172a;
+      background: #e2e8f0;
+      padding: 1.5px 3px;
+      border-radius: 3px;
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .dish-badge {
+      font-weight: 800;
+      font-size: 7.8pt;
+      color: #0f172a;
+      background: #e2e8f0;
+      padding: 1.5px 3px;
+      border-radius: 3px;
+      margin-bottom: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .meal-cost {
+      font-size: 7.5pt;
+      font-weight: 800;
+      color: #047857;
+    }
+    .empty-note {
+      font-size: 7pt;
+      color: #94a3b8;
+      font-style: italic;
+      text-align: center;
+      padding: 4px 0;
+    }
+    .ing-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .ing-list li {
+      margin-bottom: 1.5px;
+      line-height: 1.22;
+      font-size: 7.5pt;
+      color: #1e293b;
+      border-bottom: 1px dashed #e2e8f0;
+      padding-bottom: 1px;
+    }
+    .ing-list li:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+    }
+    .ing-list-compact {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .ing-list-compact li {
+      margin-bottom: 1px;
+      line-height: 1.15;
+      font-size: 7pt;
+      color: #1e293b;
+      border-bottom: 1px dashed #e2e8f0;
+      padding-bottom: 1px;
+    }
+    .ing-name {
+      color: #0f172a;
+      font-weight: 700;
+    }
+    .qty {
+      color: #334155;
+      font-weight: 600;
+    }
+    .fam-qty {
+      color: #047857;
+      font-weight: 800;
+    }
+    .panela-note {
+      color: #64748b;
+      font-size: 7pt;
+    }
+    .cal-footer {
+      margin-top: 6px;
+      padding-top: 4px;
+      border-top: 1px solid #cbd5e1;
+      font-size: 7.5pt;
+      color: #64748b;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Detalhado */
+    .day-detailed-card {
+      border: 1.5px solid #0f172a;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 10px;
+      page-break-inside: avoid;
+    }
+    .day-detailed-header {
+      background: #0f172a;
+      color: #ffffff;
+      padding: 6px 10px;
+      font-weight: 900;
+      font-size: 9pt;
+      display: flex;
+      justify-content: space-between;
+    }
+    .day-detailed-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      padding: 6px;
+      background: #ffffff;
+    }
+    .detailed-meal-box {
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .detailed-meal-header {
+      background: #f1f5f9;
+      padding: 4px 6px;
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid #cbd5e1;
+    }
+    .dish-sub {
+      display: block;
+      font-size: 7.5pt;
+      color: #047857;
+      font-weight: 700;
+    }
+    .cost-tag {
+      font-weight: 800;
+      color: #047857;
+      font-size: 8pt;
+    }
+    .report-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 7.5pt;
+    }
+    .report-table th {
+      background: #f8fafc;
+      color: #334155;
+      font-size: 7pt;
+      padding: 3px 4px;
+      border-bottom: 1px solid #cbd5e1;
+    }
+    .report-table td {
+      padding: 3px 4px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+  </style>
+</head>
+<body>
+  <div class="print-bar no-print">
+    <div>
+      <strong style="font-size: 14px;">🗓️ Cardápio Semanal de Parede (A4 Paisagem)</strong>
+      <span style="font-size: 11px; opacity: 0.8; margin-left: 8px;">Pronto para fixar na parede ou geladeira</span>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button onclick="window.print()" class="print-btn">🖨️ Imprimir / Salvar em PDF</button>
+      <button onclick="window.close()" class="close-btn">✕ Fechar</button>
+    </div>
+  </div>
+
+  <div class="page-sheet">
+    <div class="cal-header">
+      <div class="cal-title">
+        <h1>PLANEJAMENTO FAMILIAR PRO • CARDÁPIO SEMANAL DE PAREDE</h1>
+        <p>Ciclo ${cycleNum} • Semana ${weekNum} • Segunda-feira a Domingo</p>
+      </div>
+      <div class="cal-meta">
+        <div class="cal-badge"><span>Família</span><strong>${familyCount} pessoas</strong></div>
+        <div class="cal-badge"><span>Total Semanal</span><strong>R$ ${summary.totalSemana.toFixed(2).replace('.', ',')}</strong></div>
+        <div class="cal-badge"><span>Média / Dia</span><strong>R$ ${(summary.totalSemana / 7).toFixed(2).replace('.', ',')}</strong></div>
+      </div>
+    </div>
+
+    <!-- Tabela do Cardápio -->
+    ${tableHtml}
+
+    <div class="cal-footer">
+      <span>Planejamento Familiar Pro • Calculado para ${familyCount} pessoas com porções e embalagens oficiais</span>
+      <span>Mural Semanal Oficial de Cozinha • Segunda a Domingo</span>
+    </div>
+  </div>
+
+  <script>
+    // Auto-trigger print após carregar
+    window.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => {
+        try { window.print(); } catch(e){}
+      }, 350);
+    });
+  </script>
+</body>
+</html>`;
+  }
+
+  function openWallCalendarPrintWindow(week = state.activeWeek, format = window.__calendarFormat || 'rows') {
+    const docHtml = generateWallCalendarDocumentHTML(week, format);
+    try {
+      const printWin = window.open('', '_blank');
+      if (printWin) {
+        printWin.document.open();
+        printWin.document.write(docHtml);
+        printWin.document.close();
+        printWin.focus();
+        return;
+      }
+    } catch(e) {
+      console.warn('window.open falhou, usando Blob URL fallback:', e);
+    }
+
+    // Fallback com Blob URL (100% funcional no Chrome Android / Xiaomi)
+    try {
+      const blob = new Blob([docHtml], { type: 'text/html;charset=utf-8' });
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch(err) {
+      console.error('Erro ao abrir documento de impressão:', err);
+      showToast('Não foi possível abrir a janela de impressão. Permita pop-ups no navegador.', 'warning');
+    }
+  }
+
+  function printWeeklyWallCalendar(week = state.activeWeek, format = window.__calendarFormat || 'rows') {
+    openWallCalendarPrintWindow(week, format);
+  }
+
+  function setCalendarFormat(format) {
+    window.__calendarFormat = format;
+    openWeeklyMenuReportModal(window.__calendarWeek || state.activeWeek, format);
   }
 
   function setReportWeek(week) {
-    window.__reportWeek = Number(week);
-    openWeeklyMenuReportModal(Number(week), window.__reportOrientation || 'portrait');
+    window.__calendarWeek = Number(week);
+    openWeeklyMenuReportModal(Number(week), window.__calendarFormat || 'rows');
   }
 
-  function updateReportOrientationStyles(orientation) {
-    let styleEl = document.getElementById('report-dynamic-print-css');
-    if (!styleEl) {
-      styleEl = document.createElement('style');
-      styleEl.id = 'report-dynamic-print-css';
-      document.head.appendChild(styleEl);
-    }
-    styleEl.innerHTML = `
-      @page {
-        size: ${orientation === 'landscape' ? 'landscape' : 'portrait'};
-        margin: ${orientation === 'landscape' ? '6mm' : '8mm'};
-      }
-    `;
-  }
-
-  function printWeeklyMenuReport() {
-    updateReportOrientationStyles(window.__reportOrientation || 'portrait');
-    window.print();
-  }
-
-  function openWeeklyMenuReportModal(week = state.activeWeek, orientation = window.__reportOrientation || 'portrait') {
-    window.__reportWeek = Number(week);
-    window.__reportOrientation = orientation;
-    updateReportOrientationStyles(orientation);
+  function openWeeklyMenuReportModal(week = state.activeWeek, format = window.__calendarFormat || 'rows') {
+    window.__calendarWeek = Number(week);
+    window.__calendarFormat = format;
 
     const weekNum = Number(week);
     const summary = getMenuFinancialSummary(weekNum);
     const weekItems = getActiveMenuItems(weekNum);
     const days = getOrderedDaysOfWeek();
     const familyCount = state.familyMembers || 3;
+    const cycleNum = state.currentCycleNumber || 1;
 
     renderModal(`
-      <div id="menu-report-modal-wrapper" class="space-y-4 max-w-5xl mx-auto">
+      <div id="wall-calendar-modal-wrapper" class="space-y-4 max-w-6xl mx-auto">
         <!-- Control Header Bar (Hidden during print) -->
         <div class="report-controls-bar bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <div class="flex items-center gap-2">
-                <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  Impressão & Exportação PDF
+                <span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  A4 Paisagem • Folha Deitada
                 </span>
-                <span class="text-xs text-slate-400">Cardápio de Segunda a Domingo</span>
+                <span class="text-xs text-slate-400">Cardápio Oficial de Segunda a Domingo</span>
               </div>
               <h3 class="text-xl font-black text-white mt-1 flex items-center gap-2">
-                <span>🖨️</span> <span>Relatório do Cardápio Semanal</span>
+                <span>🗓️</span> <span>Calendário Semanal de Parede (Mural da Cozinha)</span>
               </h3>
             </div>
 
-            <!-- Actions: Imprimir & Fechar -->
-            <div class="flex items-center gap-2">
-              <button onclick="window.app.printWeeklyMenuReport()"
-                      class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-sm flex items-center gap-2 shadow-lg transition">
+            <!-- Action: Imprimir e Abrir Página Limpa -->
+            <div class="flex items-center gap-2 flex-wrap">
+              <button onclick="window.app.printWeeklyWallCalendar(${weekNum}, '${format}')"
+                      class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-xs sm:text-sm flex items-center gap-2 shadow-lg transition">
                 <span>🖨️</span> <span>Imprimir / Salvar em PDF</span>
               </button>
+              <button onclick="window.app.openWallCalendarPrintWindow(${weekNum}, '${format}')"
+                      class="px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs sm:text-sm transition flex items-center gap-1.5"
+                      title="Abre a folha limpa em uma nova aba do navegador">
+                <span>📄</span> <span>Nova Aba</span>
+              </button>
               <button onclick="window.app.closeModal()"
-                      class="px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm transition">
+                      class="px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs sm:text-sm transition">
                 ✕ Fechar
               </button>
             </div>
           </div>
 
-          <!-- Configuration Controls: Orientação & Semana -->
+          <!-- Configuration Controls: Formato & Semana -->
           <div class="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div class="flex items-center gap-2">
-              <span class="text-slate-400 font-bold">Orientação da Página:</span>
-              <div class="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800 gap-1">
-                <button id="btn-report-portrait"
-                        onclick="window.app.setReportOrientation('portrait')"
-                        class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${orientation === 'portrait' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-transparent text-slate-400 hover:text-white'}">
-                  📄 Retrato (Vertical)
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-slate-400 font-bold">Modo do Mural:</span>
+              <div class="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800 gap-1 flex-wrap">
+                <button onclick="window.app.setCalendarFormat('rows')"
+                        class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${format === 'rows' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-transparent text-slate-400 hover:text-white'}">
+                  🖼️ Mural de Parede (Linhas = Dias)
                 </button>
-                <button id="btn-report-landscape"
-                        onclick="window.app.setReportOrientation('landscape')"
-                        class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${orientation === 'landscape' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-transparent text-slate-400 hover:text-white'}">
-                  📑 Paisagem (Horizontal)
+                <button onclick="window.app.setCalendarFormat('cols')"
+                        class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${format === 'cols' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-transparent text-slate-400 hover:text-white'}">
+                  🗓️ Grade 7 Colunas (Dias no Topo)
+                </button>
+                <button onclick="window.app.setCalendarFormat('detailed')"
+                        class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${format === 'detailed' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-transparent text-slate-400 hover:text-white'}">
+                  📋 Detalhado com Panela
                 </button>
               </div>
             </div>
@@ -5916,155 +6504,197 @@
           </div>
         </div>
 
-        <!-- Printable Document Area -->
-        <div id="menu-report-printable-area" class="menu-report-wrapper ${orientation === 'landscape' ? 'print-landscape' : 'print-portrait'} p-4 sm:p-6 rounded-2xl border border-slate-700 bg-white shadow-2xl text-slate-900 overflow-x-auto">
-          
-          <!-- Document Header -->
-          <div class="border-b-2 border-slate-800 pb-4 mb-4">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <!-- Live Preview Document Area -->
+        <div class="p-3 sm:p-5 rounded-2xl border border-slate-700 bg-white shadow-2xl text-slate-900 overflow-x-auto">
+          <div class="min-w-[850px]">
+            <div class="cal-header" style="border-bottom: 2.5px solid #0f172a; padding-bottom: 6px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-end;">
               <div>
-                <span class="text-[10px] font-black uppercase tracking-widest text-emerald-700">Planejamento Familiar Pro</span>
-                <h1 class="text-xl sm:text-2xl font-black text-slate-950 leading-tight">CARDÁPIO SEMANAL OFICIAL DA FAMÍLIA</h1>
-                <p class="text-xs text-slate-600 font-medium mt-0.5">
-                  Segunda-feira a Domingo • Ciclo ${state.currentCycleNumber || 1} • Semana ${weekNum}
-                </p>
+                <h1 style="margin: 0; font-size: 15pt; font-weight: 900; color: #0f172a; letter-spacing: -0.02em;">PLANEJAMENTO FAMILIAR PRO • CARDÁPIO SEMANAL DE PAREDE</h1>
+                <p style="margin: 2px 0 0 0; font-size: 8.5pt; font-weight: 700; color: #475569;">Ciclo ${cycleNum} • Semana ${weekNum} • Segunda-feira a Domingo</p>
               </div>
-
-              <!-- Top Metrics Badges -->
-              <div class="flex items-center gap-2 flex-wrap">
-                <div class="report-header-badge">
-                  <span class="text-[9px] uppercase font-bold text-slate-500">Família</span>
-                  <span class="text-sm font-black text-slate-900">${familyCount} pessoas</span>
+              <div style="display: flex; gap: 8px;">
+                <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px; font-size: 8pt; text-align: right;">
+                  <span style="color:#64748b;">Família</span>
+                  <strong style="display:block; font-size: 9pt; color:#047857;">${familyCount} pessoas</strong>
                 </div>
-                <div class="report-header-badge">
-                  <span class="text-[9px] uppercase font-bold text-slate-500">Total Semanal</span>
-                  <span class="text-sm font-black text-emerald-700">R$ ${summary.totalSemana.toFixed(2).replace('.', ',')}</span>
+                <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px; font-size: 8pt; text-align: right;">
+                  <span style="color:#64748b;">Total Semanal</span>
+                  <strong style="display:block; font-size: 9pt; color:#047857;">R$ ${summary.totalSemana.toFixed(2).replace('.', ',')}</strong>
                 </div>
-                <div class="report-header-badge">
-                  <span class="text-[9px] uppercase font-bold text-slate-500">Média / Dia</span>
-                  <span class="text-sm font-black text-slate-900">R$ ${(summary.totalSemana / 7).toFixed(2).replace('.', ',')}</span>
-                </div>
-                <div class="report-header-badge">
-                  <span class="text-[9px] uppercase font-bold text-slate-500">Refeições</span>
-                  <span class="text-sm font-black text-slate-900">28 (4x/dia)</span>
+                <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px; font-size: 8pt; text-align: right;">
+                  <span style="color:#64748b;">Média / Dia</span>
+                  <strong style="display:block; font-size: 9pt; color:#047857;">R$ ${(summary.totalSemana / 7).toFixed(2).replace('.', ',')}</strong>
                 </div>
               </div>
             </div>
-          </div>
 
-          <!-- Document Days & Meals -->
-          <div class="space-y-4">
-            ${days.map((day) => {
-              const dayMeals = weekItems.filter(i => i.dia_nome === day);
-              const dayTotal = summary.dayTotals[day] || 0;
-
-              return `
-                <div class="report-day-card">
-                  <!-- Day Ribbon -->
-                  <div class="report-day-header">
-                    <div class="flex items-center gap-2">
-                      <span class="text-sm font-black tracking-wide uppercase">${day.toUpperCase()}</span>
-                      <span class="text-[11px] opacity-80">(${dayMeals.length} ingredientes no dia)</span>
-                    </div>
-                    <div class="text-sm font-black text-emerald-300">
-                      Custo do Dia: R$ ${dayTotal.toFixed(2).replace('.', ',')}
-                    </div>
-                  </div>
-
-                  <!-- 4 Meals Grid -->
-                  <div class="report-meals-grid">
-                    ${MEALS_ORDER.map((meal) => {
-                      const mealItems = dayMeals.filter(i => i.refeicao === meal);
-                      const mealCost = mealItems.reduce((acc, cur) => acc + (cur.custo || 0), 0);
-                      const dishKey = `${weekNum}_${day}_${meal}`;
-                      const dishName = state.dishNames?.[dishKey];
-                      const icons = {
-                        'Café da Manhã': '☕',
-                        'Almoço': '🍲',
-                        'Lanche da Tarde': '🥪',
-                        'Jantar': '🍽️'
-                      };
-
+            <!-- Tabela Renderizada -->
+            ${(() => {
+              if (format === 'cols') {
+                return `
+                  <table class="wall-table wall-table-cols">
+                    <thead>
+                      <tr>
+                        <th style="width: 10%;">REFEIÇÃO</th>
+                        ${days.map(d => `<th style="width: 12.8%;">${d.toUpperCase()}</th>`).join('')}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${MEALS_ORDER.map(meal => `
+                        <tr>
+                          <td class="cell-meal-head">
+                            <div class="meal-icon">${WALL_MEAL_ICONS[meal] || '🍴'}</div>
+                            <div class="meal-head-name">${meal}</div>
+                          </td>
+                          ${days.map(day => {
+                            const mItems = weekItems.filter(i => i.dia_nome === day && i.refeicao === meal);
+                            const dishKey = `${weekNum}_${day}_${meal}`;
+                            const dishName = state.dishNames?.[dishKey] || (meal === 'Almoço' ? 'Prato Principal' : meal);
+                            return `
+                              <td class="cell-meal">
+                                <div class="dish-badge">🍽️ ${dishName}</div>
+                                ${mItems.length === 0 ? `<div class="empty-note">Sem itens</div>` : `
+                                  <ul class="ing-list-compact">
+                                    ${mItems.map(item => `
+                                      <li>
+                                        <strong>${item.ingrediente_nome}</strong>:
+                                        <span>${item.porcao_pessoa}${item.medida}</span>
+                                        <span class="fam-qty">(${item.qtd_total_familia}${item.medida})</span>
+                                      </li>
+                                    `).join('')}
+                                  </ul>
+                                `}
+                              </td>
+                            `;
+                          }).join('')}
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                `;
+              } else if (format === 'detailed') {
+                return `
+                  <div class="space-y-4">
+                    ${days.map(day => {
+                      const dayMeals = weekItems.filter(i => i.dia_nome === day);
+                      const dayTotal = summary.dayTotals[day] || 0;
                       return `
-                        <div class="report-meal-box">
-                          <div class="report-meal-header">
-                            <div class="min-w-0 pr-1">
-                              <span class="font-extrabold text-xs text-slate-900 flex items-center gap-1">
-                                <span>${icons[meal] || '🍴'}</span> <span>${meal}</span>
-                              </span>
-                              ${dishName ? `
-                                <span class="text-[10px] font-bold text-emerald-800 block truncate mt-0.5">
-                                  🍽️ ${dishName}
-                                </span>
-                              ` : `
-                                <span class="text-[10px] text-slate-500 italic block mt-0.5">
-                                  ${meal === 'Almoço' ? 'Prato Principal' : meal}
-                                </span>
-                              `}
-                            </div>
-                            <span class="text-xs font-black text-emerald-700 whitespace-nowrap">
-                              R$ ${mealCost.toFixed(2).replace('.', ',')}
-                            </span>
+                        <div class="day-detailed-card">
+                          <div class="day-detailed-header">
+                            <span>${day.toUpperCase()}</span>
+                            <span>Custo do Dia: R$ ${dayTotal.toFixed(2).replace('.', ',')}</span>
                           </div>
-
-                          <!-- Items Table -->
-                          <div class="overflow-x-auto">
-                            ${mealItems.length === 0 ? `
-                              <div class="p-3 text-center text-xs text-slate-400 italic">
-                                Sem ingredientes cadastrados
-                              </div>
-                            ` : `
-                              <table class="report-table">
-                                <thead>
-                                  <tr>
-                                    <th>Ingrediente</th>
-                                    <th style="text-align: center;">Porção</th>
-                                    <th style="text-align: center;">Família (${familyCount}p)</th>
-                                    <th>Panela</th>
-                                    <th style="text-align: right;">Custo</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  ${mealItems.map(item => `
-                                    <tr>
-                                      <td class="font-bold text-slate-900">
-                                        ${item.ingrediente_nome}
-                                      </td>
-                                      <td style="text-align: center;" class="text-slate-700 whitespace-nowrap">
-                                        ${item.porcao_pessoa} ${item.medida}
-                                      </td>
-                                      <td style="text-align: center;" class="font-semibold text-slate-900 whitespace-nowrap">
-                                        ${item.qtd_total_familia} ${item.medida}
-                                      </td>
-                                      <td class="text-emerald-800 font-medium whitespace-nowrap">
-                                        ${item.medida_caseira_str || '-'}
-                                      </td>
-                                      <td style="text-align: right;" class="font-bold text-slate-900 whitespace-nowrap">
-                                        R$ ${(item.custo || 0).toFixed(2).replace('.', ',')}
-                                      </td>
-                                    </tr>
-                                  `).join('')}
-                                </tbody>
-                              </table>
-                            `}
+                          <div class="day-detailed-grid">
+                            ${MEALS_ORDER.map(meal => {
+                              const mItems = dayMeals.filter(i => i.refeicao === meal);
+                              const mCost = mItems.reduce((acc, cur) => acc + (cur.custo || 0), 0);
+                              const dishKey = `${weekNum}_${day}_${meal}`;
+                              const dishName = state.dishNames?.[dishKey] || (meal === 'Almoço' ? 'Prato Principal' : meal);
+                              return `
+                                <div class="detailed-meal-box">
+                                  <div class="detailed-meal-header">
+                                    <div>
+                                      <strong>${WALL_MEAL_ICONS[meal] || '🍴'} ${meal}</strong>
+                                      <span class="dish-sub">${dishName}</span>
+                                    </div>
+                                    <span class="cost-tag">R$ ${mCost.toFixed(2).replace('.', ',')}</span>
+                                  </div>
+                                  <table class="report-table">
+                                    <thead>
+                                      <tr>
+                                        <th>Ingrediente</th>
+                                        <th style="text-align:center;">Porção</th>
+                                        <th style="text-align:center;">Família (${familyCount}p)</th>
+                                        <th>Panela</th>
+                                        <th style="text-align:right;">Custo</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      ${mItems.map(item => `
+                                        <tr>
+                                          <td><strong>${item.ingrediente_nome}</strong></td>
+                                          <td style="text-align:center;">${item.porcao_pessoa}${item.medida}</td>
+                                          <td style="text-align:center; font-weight:bold; color:#047857;">${item.qtd_total_familia}${item.medida}</td>
+                                          <td style="color:#475569;">${item.medida_caseira_str || '-'}</td>
+                                          <td style="text-align:right; font-weight:bold;">R$ ${(item.custo || 0).toFixed(2).replace('.', ',')}</td>
+                                        </tr>
+                                      `).join('')}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              `;
+                            }).join('')}
                           </div>
                         </div>
                       `;
                     }).join('')}
                   </div>
-                </div>
-              `;
-            }).join('')}
-          </div>
+                `;
+              } else {
+                return `
+                  <table class="wall-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 10%;">DIA</th>
+                        <th style="width: 22.5%;">☕ CAFÉ DA MANHÃ</th>
+                        <th style="width: 22.5%;">🍲 ALMOÇO</th>
+                        <th style="width: 22.5%;">🥪 LANCHE DA TARDE</th>
+                        <th style="width: 22.5%;">🍽️ JANTAR</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${days.map(day => {
+                        const dayItems = weekItems.filter(i => i.dia_nome === day);
+                        const dayCost = dayItems.reduce((acc, cur) => acc + (cur.custo || 0), 0);
+                        return `
+                          <tr>
+                            <td class="cell-day">
+                              <div class="day-name">${day.toUpperCase()}</div>
+                              <div class="day-cost">R$ ${dayCost.toFixed(2).replace('.', ',')}</div>
+                            </td>
+                            ${MEALS_ORDER.map(meal => {
+                              const mItems = dayItems.filter(i => i.refeicao === meal);
+                              const mCost = mItems.reduce((acc, cur) => acc + (cur.custo || 0), 0);
+                              const dishKey = `${weekNum}_${day}_${meal}`;
+                              const dishName = state.dishNames?.[dishKey] || (meal === 'Almoço' ? 'Prato Principal' : meal);
+                              return `
+                                <td class="cell-meal">
+                                  <div class="meal-head">
+                                    <span class="dish-title">🍽️ ${dishName}</span>
+                                    <span class="meal-cost">R$ ${mCost.toFixed(2).replace('.', ',')}</span>
+                                  </div>
+                                  ${mItems.length === 0 ? `<div class="empty-note">Livre / Sem itens</div>` : `
+                                    <ul class="ing-list">
+                                      ${mItems.map(item => `
+                                        <li>
+                                          <span class="ing-name"><strong>${item.ingrediente_nome}</strong>:</span>
+                                          <span class="qty">${item.porcao_pessoa}${item.medida}</span>
+                                          <span class="fam-qty">(${item.qtd_total_familia}${item.medida} fam.)</span>
+                                          ${item.medida_caseira_str && item.medida_caseira_str !== '-' ? `<span class="panela-note">• ${item.medida_caseira_str}</span>` : ''}
+                                        </li>
+                                      `).join('')}
+                                    </ul>
+                                  `}
+                                </td>
+                              `;
+                            }).join('')}
+                          </tr>
+                        `;
+                      }).join('')}
+                    </tbody>
+                  </table>
+                `;
+              }
+            })()}
 
-          <!-- Document Footer -->
-          <div class="mt-4 pt-3 border-t border-slate-300 text-[10px] text-slate-500 flex flex-col sm:flex-row justify-between items-center gap-1">
-            <span>Planejamento Familiar Pro • Calculado para ${familyCount} pessoas • Embalagens e medidas caseiras oficiais do catálogo</span>
-            <span>Documento Oficial de Cardápio Semanal</span>
+            <div class="cal-footer" style="margin-top: 10px; padding-top: 5px; border-top: 1px solid #cbd5e1; font-size: 7.5pt; color: #64748b; display: flex; justify-content: space-between;">
+              <span>Planejamento Familiar Pro • Calculado para ${familyCount} pessoas com porções e embalagens oficiais</span>
+              <span>Mural Semanal de Parede • Segunda a Domingo</span>
+            </div>
           </div>
         </div>
       </div>
-    `);
+    `, 'sm:max-w-6xl');
   }
 
     window.app = {
@@ -6204,9 +6834,12 @@
 
     // Relatório do Cardápio em PDF
     openWeeklyMenuReportModal,
-    setReportOrientation,
+    setCalendarFormat,
+    setReportOrientation: setCalendarFormat,
     setReportWeek,
-    printWeeklyMenuReport,
+    printWeeklyWallCalendar,
+    openWallCalendarPrintWindow,
+    printWeeklyMenuReport: printWeeklyWallCalendar,
 
     closeModal,
     renderApp
