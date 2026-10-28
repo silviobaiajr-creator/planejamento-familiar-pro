@@ -262,25 +262,44 @@
         if (!state.dishNames) state.dishNames = {};
         if (!state.activeMenuMeal) state.activeMenuMeal = 'Almoço';
 
-        // Verifica se há porções corrompidas ou dados antigos (ex: Couve = 25 ou Açúcar = 16.67)
-        const isCorrupted = !state.ingredients || state.ingredients.length !== 53 ||
-          !state.menuItems || state.menuItems.length !== 176 ||
-          state.menuItems.some((i) => (i.ingrediente_nome.includes('Couve') && i.porcao_pessoa > 1) ||
-                                     (i.ingrediente_nome.includes('Açúcar Demerara') && Math.abs(i.porcao_pessoa - 16.67) < 0.1));
+        // Garante que coleções base existam sem apagar novos ingredientes/pratos adicionados pelo usuário
+        if (!Array.isArray(state.ingredients) || state.ingredients.length === 0) {
+          state.ingredients = JSON.parse(JSON.stringify(window.INITIAL_SEED_DATA?.ingredients || []));
+        }
+        if (!Array.isArray(state.menuItems) || state.menuItems.length === 0) {
+          state.menuItems = JSON.parse(JSON.stringify(window.INITIAL_SEED_DATA?.menu_items || []));
+        }
+        if (!Array.isArray(state.hygieneItems) || state.hygieneItems.length === 0) {
+          state.hygieneItems = JSON.parse(JSON.stringify(window.INITIAL_SEED_DATA?.hygiene_items || []));
+        }
+        if (!state.familyMembers) {
+          state.familyMembers = window.INITIAL_SEED_DATA?.family_members || 3;
+        }
 
-        if (isCorrupted) {
-          console.warn('Detectado cardápio com dados legados. Sincronizando com cardápio oficial dos prints...');
-          state.familyMembers = window.INITIAL_SEED_DATA.family_members || 3;
-          state.ingredients = JSON.parse(JSON.stringify(window.INITIAL_SEED_DATA.ingredients || []));
-          state.menuItems = JSON.parse(JSON.stringify(window.INITIAL_SEED_DATA.menu_items || []));
-          state.hygieneItems = JSON.parse(JSON.stringify(window.INITIAL_SEED_DATA.hygiene_items || []));
-          state.menuByWeek = {
-            1: JSON.parse(JSON.stringify(state.menuItems)),
-            2: JSON.parse(JSON.stringify(state.menuItems)),
-            3: JSON.parse(JSON.stringify(state.menuItems)),
-            4: JSON.parse(JSON.stringify(state.menuItems)),
-            5: JSON.parse(JSON.stringify(state.menuItems))
-          };
+        // Sanitização de valores pontuais legados apenas se ainda existirem (sem apagar novos itens do usuário)
+        const sanitizeLegacyBadValues = (items) => {
+          if (!Array.isArray(items)) return;
+          items.forEach((i) => {
+            if (i.ingrediente_nome && i.ingrediente_nome.includes('Couve') && i.porcao_pessoa > 1) {
+              i.porcao_pessoa = 0.33;
+              i.qtd_total_familia = 1;
+              i.medida = 'un';
+              i.medida_caseira_str = '1 folha(s)';
+            }
+            if (i.ingrediente_nome && i.ingrediente_nome.includes('Açúcar Demerara') && Math.abs(i.porcao_pessoa - 16.67) < 0.1) {
+              i.porcao_pessoa = 6.67;
+              i.qtd_total_familia = 20;
+              i.medida_caseira_str = '1 colher(es) de sopa';
+            }
+          });
+        };
+        sanitizeLegacyBadValues(state.menuItems);
+        if (state.menuByWeek) {
+          for (let w = 1; w <= 5; w++) {
+            if (Array.isArray(state.menuByWeek[w])) {
+              sanitizeLegacyBadValues(state.menuByWeek[w]);
+            }
+          }
         }
       } else if (window.INITIAL_SEED_DATA) {
         state.familyMembers = window.INITIAL_SEED_DATA.family_members || 3;
@@ -305,11 +324,9 @@
       if (!state.completedTurnovers) state.completedTurnovers = {};
       if (!state.firstDayOfWeek) state.firstDayOfWeek = 'Segunda';
       if (!state.cycleStartDate) state.cycleStartDate = '2026-11-02';
-      const base = (state.menuItems && state.menuItems.length === 176) ? state.menuItems : (window.INITIAL_SEED_DATA?.menu_items || []);
+      const base = (Array.isArray(state.menuItems) && state.menuItems.length > 0) ? state.menuItems : (window.INITIAL_SEED_DATA?.menu_items || []);
       for (let w = 1; w <= 5; w++) {
-        const weekItems = state.menuByWeek[w];
-        const weekCorrupted = !weekItems || weekItems.length !== 176 || weekItems.some((i) => (i.ingrediente_nome.includes('Couve') && i.porcao_pessoa > 1) || (i.ingrediente_nome.includes('Açúcar Demerara') && Math.abs(i.porcao_pessoa - 16.67) < 0.1));
-        if (weekCorrupted) {
+        if (!Array.isArray(state.menuByWeek[w]) || state.menuByWeek[w].length === 0) {
           state.menuByWeek[w] = JSON.parse(JSON.stringify(base));
         }
       }
@@ -1025,8 +1042,13 @@
               </h2>
             </div>
 
-            <!-- Action: Replicate Week Menu to other weeks & Sync -->
+            <!-- Action: Replicate Week Menu to other weeks & Sync & Report -->
             <div class="flex items-center gap-2 flex-wrap">
+              <button onclick="window.app.openWeeklyMenuReportModal()"
+                      class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 transition shadow-sm"
+                      title="Visualizar e imprimir cardápio de segunda a domingo em PDF">
+                <span>🖨️</span> <span>Relatório / Imprimir PDF</span>
+              </button>
               <button onclick="window.app.resetToOfficialMenu()"
                       class="px-3.5 py-2 rounded-xl bg-emerald-950/50 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-600/50 text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition shadow-sm"
                       title="Sincroniza todas as 5 semanas com os 176 itens oficiais dos prints">
@@ -3275,6 +3297,12 @@
           ${renderSelectedMealIngredientPreview(initialIng)}
         </div>
 
+        <!-- Opção de replicar para todas as 5 semanas -->
+        <label class="flex items-center space-x-2.5 text-xs text-slate-300 font-semibold cursor-pointer select-none bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 hover:border-slate-700 transition">
+          <input type="checkbox" id="add-meal-replicate-all" checked class="w-4 h-4 rounded text-emerald-500 accent-emerald-500">
+          <span>Aplicar em todas as semanas (Semanas 1 a 5)</span>
+        </label>
+
         <div class="pt-1">
           <button id="add-meal-confirm-btn"
                   onclick="window.app.confirmAddMealItem('${day}', '${meal}', ${week})"
@@ -3349,6 +3377,7 @@
   function confirmAddMealItem(day, meal, week = state.activeWeek) {
     const select = document.getElementById('new-meal-ing');
     const portionInput = document.getElementById('new-meal-portion');
+    const replicateAll = document.getElementById('add-meal-replicate-all')?.checked ?? true;
     if (!select || !portionInput) return;
 
     const ingName = select.value;
@@ -3358,8 +3387,8 @@
     const portion = parseFloat(portionInput.value) || ing.peso_porcao_base || 1;
     const computed = computeMenuItemFromPortion(portion, ing);
 
-    const newItem = {
-      id: `menu_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+    const makeItem = (targetWeek) => ({
+      id: `menu_${Date.now()}_w${targetWeek}_${Math.random().toString(36).substr(2, 4)}`,
       dia_cod: day,
       dia_nome: day,
       refeicao: meal,
@@ -3369,15 +3398,31 @@
       qtd_total_familia: computed.qtd_total_familia,
       medida_caseira_str: computed.medida_caseira_str,
       custo: computed.custo
-    };
+    });
 
-    if (!state.menuByWeek[week]) state.menuByWeek[week] = [];
-    state.menuByWeek[week].push(newItem);
+    if (replicateAll) {
+      for (let w = 1; w <= 5; w++) {
+        if (!state.menuByWeek[w]) state.menuByWeek[w] = [];
+        state.menuByWeek[w].push(makeItem(w));
+      }
+      if (Array.isArray(state.menuItems)) {
+        state.menuItems.push(makeItem(1));
+      }
+    } else {
+      if (!state.menuByWeek[week]) state.menuByWeek[week] = [];
+      state.menuByWeek[week].push(makeItem(week));
+    }
+
+    // Posiciona imediatamente na visualização da refeição adicionada
+    state.activeTab = 'cardapio';
+    state.activeWeek = Number(week);
+    state.activeDay = day;
+    state.activeMenuMeal = meal;
 
     saveState();
     renderApp();
     closeModal();
-    showToast(`Adicionado à Semana ${week}: ${ing.nome}!`, 'success');
+    showToast(`Adicionado: ${ing.nome} no ${meal} (${day})${replicateAll ? ' em todas as 5 semanas!' : ` na Semana ${week}!`}`, 'success');
   }
 
   // Duplicate Single Meal
@@ -4511,11 +4556,21 @@
       nome_medida_caseira: document.getElementById('new-ing-measure-name')?.value.trim() || 'unidade(s)'
     };
 
-    state.ingredients.push(newIng);
+    const existingIdx = state.ingredients.findIndex(i => i.nome.toLowerCase() === newIng.nome.toLowerCase());
+    if (existingIdx >= 0) {
+      state.ingredients[existingIdx] = { ...state.ingredients[existingIdx], ...newIng };
+    } else {
+      state.ingredients.push(newIng);
+    }
+
+    // Limpa buscas e categorias para garantir visualização imediata do novo item no catálogo
+    window.__ingSearchQuery = '';
+    window.__ingCategoryFilter = 'Todos';
+
     saveState();
     renderApp();
     closeModal();
-    showToast(`Ingrediente ${name} adicionado com sucesso!`, 'success');
+    showToast(`Ingrediente "${name}" salvo com sucesso no catálogo!`, 'success');
 
     // Se o usuário veio de uma refeição do cardápio (+ Item), reabre o modal já com ele selecionado!
     if (window.__pendingMealContext) {
@@ -4901,8 +4956,8 @@
     renderApp();
   }
 
-  // Modal Container
-  function renderModal(contentHtml) {
+  // Modal Container (Suporta largura expandida para relatórios e tabelas completas)
+  function renderModal(contentHtml, customMaxWidth = null) {
     let modalEl = document.getElementById('app-modal-container');
     if (!modalEl) {
       modalEl = document.createElement('div');
@@ -4910,9 +4965,11 @@
       document.body.appendChild(modalEl);
     }
 
+    const maxWidthClass = customMaxWidth || (contentHtml.includes('menu-report-modal-wrapper') ? 'sm:max-w-5xl' : 'sm:max-w-lg');
+
     modalEl.innerHTML = `
       <div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 modal-backdrop" onclick="if(event.target === this) window.app.closeModal()">
-        <div class="bg-slate-900 border border-slate-800 w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl bottom-sheet bottom-sheet-mobile max-h-[92vh] overflow-y-auto">
+        <div class="bg-slate-900 border border-slate-800 w-full ${maxWidthClass} rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl bottom-sheet bottom-sheet-mobile max-h-[92vh] overflow-y-auto">
           ${contentHtml}
         </div>
       </div>
@@ -5736,6 +5793,280 @@
     showToast(`Nome do prato removido.`, 'info');
   }
 
+
+  // --- RELATÓRIO DO CARDÁPIO SEMANAL EM PDF (SEGUNDA A DOMINGO) ---
+  window.__reportOrientation = 'portrait';
+  window.__reportWeek = 1;
+
+  function setReportOrientation(orientation) {
+    window.__reportOrientation = orientation;
+    updateReportOrientationStyles(orientation);
+    const container = document.getElementById('menu-report-printable-area');
+    if (container) {
+      container.className = `menu-report-wrapper ${orientation === 'landscape' ? 'print-landscape' : 'print-portrait'} p-4 sm:p-6 rounded-2xl border border-slate-700 bg-white shadow-2xl text-slate-900 overflow-x-auto`;
+    }
+    const btnPortrait = document.getElementById('btn-report-portrait');
+    const btnLandscape = document.getElementById('btn-report-landscape');
+    if (btnPortrait && btnLandscape) {
+      if (orientation === 'portrait') {
+        btnPortrait.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition bg-emerald-600 text-white shadow-sm';
+        btnLandscape.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition bg-transparent text-slate-400 hover:text-white';
+      } else {
+        btnPortrait.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition bg-transparent text-slate-400 hover:text-white';
+        btnLandscape.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition bg-emerald-600 text-white shadow-sm';
+      }
+    }
+  }
+
+  function setReportWeek(week) {
+    window.__reportWeek = Number(week);
+    openWeeklyMenuReportModal(Number(week), window.__reportOrientation || 'portrait');
+  }
+
+  function updateReportOrientationStyles(orientation) {
+    let styleEl = document.getElementById('report-dynamic-print-css');
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = 'report-dynamic-print-css';
+      document.head.appendChild(styleEl);
+    }
+    styleEl.innerHTML = `
+      @page {
+        size: ${orientation === 'landscape' ? 'landscape' : 'portrait'};
+        margin: ${orientation === 'landscape' ? '6mm' : '8mm'};
+      }
+    `;
+  }
+
+  function printWeeklyMenuReport() {
+    updateReportOrientationStyles(window.__reportOrientation || 'portrait');
+    window.print();
+  }
+
+  function openWeeklyMenuReportModal(week = state.activeWeek, orientation = window.__reportOrientation || 'portrait') {
+    window.__reportWeek = Number(week);
+    window.__reportOrientation = orientation;
+    updateReportOrientationStyles(orientation);
+
+    const weekNum = Number(week);
+    const summary = getMenuFinancialSummary(weekNum);
+    const weekItems = getActiveMenuItems(weekNum);
+    const days = getOrderedDaysOfWeek();
+    const familyCount = state.familyMembers || 3;
+
+    renderModal(`
+      <div id="menu-report-modal-wrapper" class="space-y-4 max-w-5xl mx-auto">
+        <!-- Control Header Bar (Hidden during print) -->
+        <div class="report-controls-bar bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  Impressão & Exportação PDF
+                </span>
+                <span class="text-xs text-slate-400">Cardápio de Segunda a Domingo</span>
+              </div>
+              <h3 class="text-xl font-black text-white mt-1 flex items-center gap-2">
+                <span>🖨️</span> <span>Relatório do Cardápio Semanal</span>
+              </h3>
+            </div>
+
+            <!-- Actions: Imprimir & Fechar -->
+            <div class="flex items-center gap-2">
+              <button onclick="window.app.printWeeklyMenuReport()"
+                      class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-sm flex items-center gap-2 shadow-lg transition">
+                <span>🖨️</span> <span>Imprimir / Salvar em PDF</span>
+              </button>
+              <button onclick="window.app.closeModal()"
+                      class="px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm transition">
+                ✕ Fechar
+              </button>
+            </div>
+          </div>
+
+          <!-- Configuration Controls: Orientação & Semana -->
+          <div class="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div class="flex items-center gap-2">
+              <span class="text-slate-400 font-bold">Orientação da Página:</span>
+              <div class="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800 gap-1">
+                <button id="btn-report-portrait"
+                        onclick="window.app.setReportOrientation('portrait')"
+                        class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${orientation === 'portrait' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-transparent text-slate-400 hover:text-white'}">
+                  📄 Retrato (Vertical)
+                </button>
+                <button id="btn-report-landscape"
+                        onclick="window.app.setReportOrientation('landscape')"
+                        class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${orientation === 'landscape' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-transparent text-slate-400 hover:text-white'}">
+                  📑 Paisagem (Horizontal)
+                </button>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <span class="text-slate-400 font-bold">Semana:</span>
+              <div class="flex space-x-1">
+                ${[1, 2, 3, 4, 5].map((w) => `
+                  <button onclick="window.app.setReportWeek(${w})"
+                          class="px-2.5 py-1 rounded-lg text-xs font-bold transition ${w === weekNum ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}">
+                    Semana ${w}
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Printable Document Area -->
+        <div id="menu-report-printable-area" class="menu-report-wrapper ${orientation === 'landscape' ? 'print-landscape' : 'print-portrait'} p-4 sm:p-6 rounded-2xl border border-slate-700 bg-white shadow-2xl text-slate-900 overflow-x-auto">
+          
+          <!-- Document Header -->
+          <div class="border-b-2 border-slate-800 pb-4 mb-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <span class="text-[10px] font-black uppercase tracking-widest text-emerald-700">Planejamento Familiar Pro</span>
+                <h1 class="text-xl sm:text-2xl font-black text-slate-950 leading-tight">CARDÁPIO SEMANAL OFICIAL DA FAMÍLIA</h1>
+                <p class="text-xs text-slate-600 font-medium mt-0.5">
+                  Segunda-feira a Domingo • Ciclo ${state.currentCycleNumber || 1} • Semana ${weekNum}
+                </p>
+              </div>
+
+              <!-- Top Metrics Badges -->
+              <div class="flex items-center gap-2 flex-wrap">
+                <div class="report-header-badge">
+                  <span class="text-[9px] uppercase font-bold text-slate-500">Família</span>
+                  <span class="text-sm font-black text-slate-900">${familyCount} pessoas</span>
+                </div>
+                <div class="report-header-badge">
+                  <span class="text-[9px] uppercase font-bold text-slate-500">Total Semanal</span>
+                  <span class="text-sm font-black text-emerald-700">R$ ${summary.totalSemana.toFixed(2).replace('.', ',')}</span>
+                </div>
+                <div class="report-header-badge">
+                  <span class="text-[9px] uppercase font-bold text-slate-500">Média / Dia</span>
+                  <span class="text-sm font-black text-slate-900">R$ ${(summary.totalSemana / 7).toFixed(2).replace('.', ',')}</span>
+                </div>
+                <div class="report-header-badge">
+                  <span class="text-[9px] uppercase font-bold text-slate-500">Refeições</span>
+                  <span class="text-sm font-black text-slate-900">28 (4x/dia)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Document Days & Meals -->
+          <div class="space-y-4">
+            ${days.map((day) => {
+              const dayMeals = weekItems.filter(i => i.dia_nome === day);
+              const dayTotal = summary.dayTotals[day] || 0;
+
+              return `
+                <div class="report-day-card">
+                  <!-- Day Ribbon -->
+                  <div class="report-day-header">
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm font-black tracking-wide uppercase">${day.toUpperCase()}</span>
+                      <span class="text-[11px] opacity-80">(${dayMeals.length} ingredientes no dia)</span>
+                    </div>
+                    <div class="text-sm font-black text-emerald-300">
+                      Custo do Dia: R$ ${dayTotal.toFixed(2).replace('.', ',')}
+                    </div>
+                  </div>
+
+                  <!-- 4 Meals Grid -->
+                  <div class="report-meals-grid">
+                    ${MEALS_ORDER.map((meal) => {
+                      const mealItems = dayMeals.filter(i => i.refeicao === meal);
+                      const mealCost = mealItems.reduce((acc, cur) => acc + (cur.custo || 0), 0);
+                      const dishKey = `${weekNum}_${day}_${meal}`;
+                      const dishName = state.dishNames?.[dishKey];
+                      const icons = {
+                        'Café da Manhã': '☕',
+                        'Almoço': '🍲',
+                        'Lanche da Tarde': '🥪',
+                        'Jantar': '🍽️'
+                      };
+
+                      return `
+                        <div class="report-meal-box">
+                          <div class="report-meal-header">
+                            <div class="min-w-0 pr-1">
+                              <span class="font-extrabold text-xs text-slate-900 flex items-center gap-1">
+                                <span>${icons[meal] || '🍴'}</span> <span>${meal}</span>
+                              </span>
+                              ${dishName ? `
+                                <span class="text-[10px] font-bold text-emerald-800 block truncate mt-0.5">
+                                  🍽️ ${dishName}
+                                </span>
+                              ` : `
+                                <span class="text-[10px] text-slate-500 italic block mt-0.5">
+                                  ${meal === 'Almoço' ? 'Prato Principal' : meal}
+                                </span>
+                              `}
+                            </div>
+                            <span class="text-xs font-black text-emerald-700 whitespace-nowrap">
+                              R$ ${mealCost.toFixed(2).replace('.', ',')}
+                            </span>
+                          </div>
+
+                          <!-- Items Table -->
+                          <div class="overflow-x-auto">
+                            ${mealItems.length === 0 ? `
+                              <div class="p-3 text-center text-xs text-slate-400 italic">
+                                Sem ingredientes cadastrados
+                              </div>
+                            ` : `
+                              <table class="report-table">
+                                <thead>
+                                  <tr>
+                                    <th>Ingrediente</th>
+                                    <th style="text-align: center;">Porção</th>
+                                    <th style="text-align: center;">Família (${familyCount}p)</th>
+                                    <th>Panela</th>
+                                    <th style="text-align: right;">Custo</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  ${mealItems.map(item => `
+                                    <tr>
+                                      <td class="font-bold text-slate-900">
+                                        ${item.ingrediente_nome}
+                                      </td>
+                                      <td style="text-align: center;" class="text-slate-700 whitespace-nowrap">
+                                        ${item.porcao_pessoa} ${item.medida}
+                                      </td>
+                                      <td style="text-align: center;" class="font-semibold text-slate-900 whitespace-nowrap">
+                                        ${item.qtd_total_familia} ${item.medida}
+                                      </td>
+                                      <td class="text-emerald-800 font-medium whitespace-nowrap">
+                                        ${item.medida_caseira_str || '-'}
+                                      </td>
+                                      <td style="text-align: right;" class="font-bold text-slate-900 whitespace-nowrap">
+                                        R$ ${(item.custo || 0).toFixed(2).replace('.', ',')}
+                                      </td>
+                                    </tr>
+                                  `).join('')}
+                                </tbody>
+                              </table>
+                            `}
+                          </div>
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+
+          <!-- Document Footer -->
+          <div class="mt-4 pt-3 border-t border-slate-300 text-[10px] text-slate-500 flex flex-col sm:flex-row justify-between items-center gap-1">
+            <span>Planejamento Familiar Pro • Calculado para ${familyCount} pessoas • Embalagens e medidas caseiras oficiais do catálogo</span>
+            <span>Documento Oficial de Cardápio Semanal</span>
+          </div>
+        </div>
+      </div>
+    `);
+  }
+
     window.app = {
     switchTab: (tabId) => {
       state.activeTab = tabId;
@@ -5870,6 +6201,12 @@
     filterSwapMealIngredients,
     setSwapMealCategory,
     handleSwapIngredient,
+
+    // Relatório do Cardápio em PDF
+    openWeeklyMenuReportModal,
+    setReportOrientation,
+    setReportWeek,
+    printWeeklyMenuReport,
 
     closeModal,
     renderApp
