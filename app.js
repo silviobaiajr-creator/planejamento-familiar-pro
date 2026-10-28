@@ -2534,7 +2534,53 @@
     closeModal();
   }
 
-  // Bidirectional Edit Modal for Menu Items
+  // Bidirectional Edit Modal for Menu Items with Dynamic Search & Swap
+  function renderSwapMealResultsHTML(filtered, currentSelectedName, itemId) {
+    const rawSearch = (window.__swapMealSearchQuery || '').trim();
+    if (!filtered || filtered.length === 0) {
+      return `
+        <div class="p-3 text-center space-y-2 bg-slate-900/80 rounded-xl border border-dashed border-slate-700">
+          <p class="text-xs text-slate-400">Nenhum ingrediente com o nome "<strong class="text-emerald-400 font-semibold">${rawSearch}</strong>".</p>
+          <button onclick="window.app.openAddIngredientModal('${rawSearch.replace(/'/g, "\\'")}')"
+                  class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-md transition">
+            <span>➕</span> <span>Cadastrar "${rawSearch}" no Catálogo</span>
+          </button>
+        </div>
+      `;
+    }
+
+    return filtered.map((ing) => {
+      const isSelected = ing.nome === currentSelectedName;
+      return `
+        <div onclick="window.app.handleSwapIngredient('${ing.nome.replace(/'/g, "\\'")}', '${itemId}')"
+             class="flex items-center justify-between p-2 rounded-xl border transition cursor-pointer active:scale-[0.99] ${isSelected ? 'bg-emerald-950/70 border-emerald-500 text-white shadow-sm ring-1 ring-emerald-500/50' : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-800/80'}">
+          <div class="flex-1 min-w-0 pr-2">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-bold text-xs sm:text-sm text-white truncate">${ing.nome}</span>
+              <span class="text-[9px] px-1.5 py-0.5 rounded font-medium ${getCategoryBadgeClass(ing.categoria)}">
+                ${ing.categoria}
+              </span>
+            </div>
+            <span class="text-[11px] text-slate-400 block mt-0.5">
+              Pacote: ${ing.tamanho_pacote} ${ing.medida} • R$ ${ing.preco_pacote.toFixed(2).replace('.', ',')}
+            </span>
+          </div>
+          <div class="flex-shrink-0 text-right">
+            ${isSelected ? `
+              <span class="text-xs font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-lg border border-emerald-500/40 inline-flex items-center gap-1">
+                <span>✓</span> <span>Atual</span>
+              </span>
+            ` : `
+              <span class="text-xs text-slate-400 hover:text-emerald-400 font-semibold px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700">
+                Trocar
+              </span>
+            `}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
   function openEditMealItemModal(itemId, week = state.activeWeek) {
     const items = getActiveMenuItems(week);
     const item = items.find((i) => i.id === itemId);
@@ -2543,29 +2589,52 @@
     const ing = getIngredientByName(item.ingrediente_nome);
     if (!ing) return;
 
+    window.__swapMealSearchQuery = '';
+    window.__swapMealCategoryFilter = 'Todos';
+    window.__pendingSwapContext = { itemId, week };
+
+    const sortedIngs = [...state.ingredients].sort((a, b) => a.nome.localeCompare(b.nome));
+
     renderModal(`
       <div class="space-y-4">
         <div class="flex items-center justify-between pb-3 border-b border-slate-800">
           <div>
             <span class="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Semana ${week} • ${item.dia_nome} • ${item.refeicao}</span>
-            <h3 class="text-lg font-bold text-white mt-0.5">${item.ingrediente_nome}</h3>
+            <h3 id="edit-modal-title" class="text-lg font-bold text-white mt-0.5">${item.ingrediente_nome}</h3>
           </div>
-          <button onclick="window.app.closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
+          <button onclick="window.__pendingSwapContext = null; window.app.closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
         </div>
 
-        <div class="space-y-1">
-          <label class="block text-xs font-semibold text-slate-400">Trocar Ingrediente:</label>
-          <select id="edit-meal-ing-select"
-                  onchange="window.app.handleSwapIngredient(this.value, '${item.id}')"
-                  class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500">
-            ${state.ingredients.map((i) => `
-              <option value="${i.nome}" ${i.nome === item.ingrediente_nome ? 'selected' : ''}>
-                ${i.nome} (${i.categoria}) — R$ ${i.preco_pacote.toFixed(2)}/${i.tamanho_pacote}${i.medida}
-              </option>
+        <!-- Seção Trocar Ingrediente com Busca Dinâmica -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-bold text-slate-300">Trocar Ingrediente:</label>
+            <span class="text-[10px] text-slate-400">Atual: <strong id="edit-modal-current-ing-badge" class="text-emerald-400 font-semibold">${item.ingrediente_nome}</strong></span>
+          </div>
+
+          <div class="relative">
+            <span class="absolute left-3.5 top-3 text-slate-400 text-sm">🔍</span>
+            <input type="text" id="swap-meal-search-input"
+                   placeholder="Digite o nome para buscar e trocar..."
+                   oninput="window.app.filterSwapMealIngredients(this.value, '${item.id}')"
+                   class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500">
+          </div>
+
+          <div id="swap-meal-categories-bar" class="flex space-x-1.5 overflow-x-auto no-scrollbar py-0.5">
+            ${['Todos', 'Mercearia', 'Carnes/Ovos', 'Hortifrúti', 'Laticínios/Padaria', 'Outros'].map(cat => `
+              <button onclick="window.app.setSwapMealCategory('${cat}', '${item.id}')"
+                      class="px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition ${cat === 'Todos' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">
+                ${cat}
+              </button>
             `).join('')}
-          </select>
+          </div>
+
+          <div id="swap-meal-results-container" class="max-h-36 overflow-y-auto space-y-1 p-1 bg-slate-950/70 rounded-xl border border-slate-800">
+            ${renderSwapMealResultsHTML(sortedIngs, item.ingrediente_nome, item.id)}
+          </div>
         </div>
 
+        <!-- Edição Bidirecional e Dados Condicionados ao Ingrediente -->
         <div class="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-800 space-y-3">
           <div class="flex items-center justify-between text-xs text-slate-400">
             <span class="font-bold text-white">Edição Bidirecional:</span>
@@ -2574,7 +2643,7 @@
 
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Porção / Pessoa (${item.medida}):</label>
+              <label id="label-portion-person" class="block text-xs text-slate-400 mb-1">Porção / Pessoa (${item.medida}):</label>
               <input type="number" step="any" min="0" id="input-portion-person"
                      value="${item.porcao_pessoa}"
                      oninput="window.app.handlePortionChange(this.value)"
@@ -2582,7 +2651,7 @@
             </div>
 
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Total Família (${item.medida}):</label>
+              <label id="label-total-family" class="block text-xs text-slate-400 mb-1">Total Família (${item.medida}):</label>
               <input type="number" step="any" min="0" id="input-total-family"
                      value="${item.qtd_total_familia}"
                      oninput="window.app.handleTotalFamilyChange(this.value)"
@@ -2591,7 +2660,7 @@
           </div>
 
           <div class="pt-1">
-            <label class="block text-xs text-slate-400 mb-1">Medida para a Panela (${ing.nome_medida_caseira}):</label>
+            <label id="label-measures-panela" class="block text-xs text-slate-400 mb-1">Medida para a Panela (${ing.nome_medida_caseira || 'unidade(s)'}):</label>
             <div class="flex items-center space-x-2">
               <button onclick="window.app.stepMeasureModal(-0.5)"
                       class="w-9 h-9 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-bold flex items-center justify-center">-</button>
@@ -2630,6 +2699,41 @@
     `);
 
     window.__currentEditingItem = { ...item, ing, week };
+  }
+
+  function filterSwapMealIngredients(query, itemId) {
+    window.__swapMealSearchQuery = query;
+    const cat = window.__swapMealCategoryFilter || 'Todos';
+    const q = (query || '').toLowerCase().trim();
+
+    const filtered = state.ingredients
+      .filter(i => {
+        const matchCat = cat === 'Todos' || i.categoria === cat;
+        const matchQ = !q || i.nome.toLowerCase().includes(q);
+        return matchCat && matchQ;
+      })
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+
+    const listEl = document.getElementById('swap-meal-results-container');
+    const currentName = window.__currentEditingItem?.ingrediente_nome || '';
+    if (listEl) {
+      listEl.innerHTML = renderSwapMealResultsHTML(filtered, currentName, itemId);
+    }
+  }
+
+  function setSwapMealCategory(cat, itemId) {
+    window.__swapMealCategoryFilter = cat;
+    const bar = document.getElementById('swap-meal-categories-bar');
+    if (bar) {
+      const cats = ['Todos', 'Mercearia', 'Carnes/Ovos', 'Hortifrúti', 'Laticínios/Padaria', 'Outros'];
+      bar.innerHTML = cats.map(c => `
+        <button onclick="window.app.setSwapMealCategory('${c}', '${itemId}')"
+                class="px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition ${c === cat ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">
+          ${c}
+        </button>
+      `).join('');
+    }
+    filterSwapMealIngredients(window.__swapMealSearchQuery || '', itemId);
   }
 
   function handlePortionChange(val) {
@@ -2713,10 +2817,51 @@
     const ctx = window.__currentEditingItem;
     if (!ctx) return;
 
+    // 1. Atualiza o contexto interno
     ctx.ing = newIng;
     ctx.ingrediente_nome = newIng.nome;
     ctx.medida = newIng.medida;
-    handlePortionChange(ctx.porcao_pessoa);
+
+    // 2. Atualiza a porção base para o padrão do novo ingrediente
+    const newPortion = newIng.peso_porcao_base || 50;
+    ctx.porcao_pessoa = newPortion;
+
+    // 3. Atualiza os rótulos de unidades condicionados ao novo produto
+    const labelPortion = document.getElementById('label-portion-person');
+    const labelTotal = document.getElementById('label-total-family');
+    const labelPanela = document.getElementById('label-measures-panela');
+    const badgeCurrent = document.getElementById('edit-modal-current-ing-badge');
+    const modalTitle = document.getElementById('edit-modal-title');
+
+    if (labelPortion) labelPortion.textContent = `Porção / Pessoa (${newIng.medida}):`;
+    if (labelTotal) labelTotal.textContent = `Total Família (${newIng.medida}):`;
+    if (labelPanela) labelPanela.textContent = `Medida para a Panela (${newIng.nome_medida_caseira || 'unidade(s)'}):`;
+    if (badgeCurrent) badgeCurrent.textContent = newIng.nome;
+    if (modalTitle) modalTitle.textContent = newIng.nome;
+
+    // 4. Recalcula todos os valores de porção, panela e custo para o novo ingrediente
+    const res = computeMenuItemFromPortion(newPortion, newIng);
+    ctx.qtd_total_familia = res.qtd_total_familia;
+    ctx.medida_caseira_str = res.medida_caseira_str;
+    ctx.custo = res.custo;
+
+    // 5. Atualiza todos os campos de entrada no DOM
+    const inputPortion = document.getElementById('input-portion-person');
+    const inputTotal = document.getElementById('input-total-family');
+    const inputMeasures = document.getElementById('input-measures-count');
+    const measureStr = document.getElementById('live-measure-str');
+    const costPreview = document.getElementById('live-cost-preview');
+
+    if (inputPortion) inputPortion.value = res.porcao_pessoa;
+    if (inputTotal) inputTotal.value = res.qtd_total_familia;
+    if (inputMeasures) inputMeasures.value = res.medidas_num;
+    if (measureStr) measureStr.innerText = `🥄 ${res.medida_caseira_str}`;
+    if (costPreview) costPreview.innerText = `R$ ${res.custo.toFixed(2).replace('.', ',')}`;
+
+    // 6. Atualiza a lista de resultados para marcar o novo ingrediente como selecionado
+    filterSwapMealIngredients(window.__swapMealSearchQuery || '', itemId);
+
+    showToast(`Trocado para ${newIng.nome}! Campos e medidas atualizados.`, 'info');
   }
 
   function saveEditedMenuItem(itemId, week = state.activeWeek) {
@@ -4152,8 +4297,16 @@
     // Se o usuário veio de uma refeição do cardápio (+ Item), reabre o modal já com ele selecionado!
     if (window.__pendingMealContext) {
       const { day, meal, week } = window.__pendingMealContext;
+      window.__pendingMealContext = null;
       setTimeout(() => {
         openAddMealItemModal(day, meal, week, newIng.nome);
+      }, 150);
+    } else if (window.__pendingSwapContext) {
+      const { itemId, week } = window.__pendingSwapContext;
+      window.__pendingSwapContext = null;
+      setTimeout(() => {
+        openEditMealItemModal(itemId, week);
+        handleSwapIngredient(newIng.nome, itemId);
       }, 150);
     }
   }
@@ -5482,6 +5635,11 @@
     setAddMealCategory,
     selectMealIngredient,
     updateNewMealCostPreview,
+
+    // Cardápio Swap Meal Search & Selection
+    filterSwapMealIngredients,
+    setSwapMealCategory,
+    handleSwapIngredient,
 
     closeModal,
     renderApp
