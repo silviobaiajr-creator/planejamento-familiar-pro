@@ -216,6 +216,7 @@
     cycleHistory: [],
     dishNames: {}, // { [`${week}_${day}_${meal}`]: string }
     activeKitchenMeal: 'Almoço',
+    activeMenuMeal: 'Almoço',
     shoppingViewFilter: 'all',
     supabaseConfig: { url: 'https://deydppcfgyqbudzqiqty.supabase.co', key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRleWRwcGNmZ3lxYnVkenFpcXR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMxNTMyMjEsImV4cCI6MjEwODcyOTIyMX0.zetBuSXxlB3uvFxBkBjEvp9VimsG1E9hvRxKp4JRaZs', autoSync: true },
     lastSync: null
@@ -259,6 +260,7 @@
 
         // Garante que dishNames exista
         if (!state.dishNames) state.dishNames = {};
+        if (!state.activeMenuMeal) state.activeMenuMeal = 'Almoço';
 
         // Verifica se há porções corrompidas ou dados antigos (ex: Couve = 25 ou Açúcar = 16.67)
         const isCorrupted = !state.ingredients || state.ingredients.length !== 53 ||
@@ -1090,20 +1092,30 @@
           </div>
         </div>
 
-        <!-- Clean Day Tabs -->
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3">
+        <!-- Sticky Day & Context Bar (Permanente no topo durante rolagem) -->
+        <div class="sticky top-[56px] sm:top-[64px] z-20 bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-2xl p-3 shadow-xl">
           <div class="flex items-center justify-between mb-2 px-1">
-            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Filtrar Dia da Semana</span>
-            <span class="text-xs text-emerald-400 font-medium">Toque para ver e editar as refeições</span>
+            <div class="flex items-center gap-2">
+              <span class="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
+                <span class="text-emerald-400">Semana ${state.activeWeek}</span> • <span>${state.activeDay}</span>
+              </span>
+              <span class="text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700/60 hidden xs:inline">
+                ${state.familyMembers} pessoa(s)
+              </span>
+            </div>
+            <span class="text-xs sm:text-sm font-black text-emerald-400">
+              Total do Dia: R$ ${dayCost.toFixed(2).replace('.', ',')}
+            </span>
           </div>
-          <div class="flex space-x-1.5 overflow-x-auto no-scrollbar">
+
+          <div class="flex space-x-1.5 overflow-x-auto no-scrollbar pb-0.5">
             ${getOrderedDaysOfWeek().map((day) => {
               const isSelected = day === state.activeDay;
               const subtotal = summary.dayTotals[day] || 0;
               return `
                 <button onclick="window.app.setActiveDay('${day}')"
-                        class="flex-1 min-w-[76px] py-2 px-2 rounded-xl text-center transition flex flex-col items-center ${isSelected ? 'day-tab-active' : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white'}">
-                  <span class="text-xs font-bold">${day}</span>
+                        class="flex-1 min-w-[68px] sm:min-w-[76px] py-1.5 px-1.5 rounded-xl text-center transition flex flex-col items-center ${isSelected ? 'day-tab-active' : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white'}">
+                  <span class="text-xs font-bold">${day.slice(0, 3)}</span>
                   <span class="text-[10px] mt-0.5 opacity-90">R$ ${subtotal.toFixed(0)}</span>
                 </button>
               `;
@@ -1111,71 +1123,128 @@
           </div>
         </div>
 
-        <!-- 4 Meal Cards / Accordions for Selected Day -->
-        <div class="space-y-4">
-          ${MEALS_ORDER.map((mealName) => {
-            const mealItems = dayItems.filter((i) => i.refeicao === mealName);
+        <!-- Horizontal Meal Carousel (Estilo Aba Panela) -->
+        <div class="space-y-2 mt-2">
+          <div class="flex items-center justify-between text-xs px-1">
+            <span class="text-slate-400 font-semibold flex items-center gap-1.5">
+              <span>🍽️</span> <span>Selecione a Refeição:</span>
+            </span>
+            <span class="text-emerald-400 font-medium text-[11px]">
+              Toque para ver os ingredientes abaixo
+            </span>
+          </div>
+
+          <div class="flex items-center space-x-2 overflow-x-auto no-scrollbar py-1">
+            ${MEALS_ORDER.map((mealName) => {
+              const activeMeal = state.activeMenuMeal || 'Almoço';
+              const isSelected = activeMeal === mealName;
+              const mealItems = dayItems.filter((i) => i.refeicao === mealName);
+              const dishKey = `${state.activeWeek}_${state.activeDay}_${mealName}`;
+              const dishName = state.dishNames?.[dishKey];
+              const mealCost = mealItems.reduce((acc, cur) => acc + (cur.custo || 0), 0);
+
+              const icons = {
+                'Café da Manhã': '☕',
+                'Almoço': '🍲',
+                'Lanche da Tarde': '🥪',
+                'Jantar': '🍽️'
+              };
+
+              return `
+                <button onclick="window.app.setActiveMenuMeal('${mealName}')"
+                        class="flex-1 min-w-[125px] sm:min-w-[145px] p-2.5 rounded-2xl border transition flex flex-col justify-between text-left active:scale-[0.98] ${isSelected ? 'bg-emerald-950/90 border-emerald-500 text-white shadow-lg ring-1 ring-emerald-500/50' : 'bg-slate-900/90 border-slate-800 text-slate-300 hover:bg-slate-800 hover:border-slate-700'}">
+                  <div class="flex items-center justify-between w-full">
+                    <span class="text-xl">${icons[mealName] || '🍴'}</span>
+                    <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-400 border border-slate-700/60'}">
+                      ${mealItems.length} itens
+                    </span>
+                  </div>
+                  <div class="mt-2 w-full">
+                    <span class="font-extrabold text-xs sm:text-sm block leading-tight truncate">${mealName}</span>
+                    <span class="text-[11px] font-bold text-emerald-400 block mt-0.5">R$ ${mealCost.toFixed(2).replace('.', ',')}</span>
+                    <span class="text-[10px] text-slate-400 truncate block mt-0.5 font-medium ${dishName ? 'text-emerald-300 font-bold' : ''}">
+                      ${dishName ? `🍽️ ${dishName}` : '+ Nome do prato'}
+                    </span>
+                  </div>
+                </button>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- Single Selected Meal Card (Compacto, direto e sem rolagem cansativa) -->
+        <div class="mt-3">
+          ${(() => {
+            const activeMeal = state.activeMenuMeal || 'Almoço';
+            const mealItems = dayItems.filter((i) => i.refeicao === activeMeal);
             const mealCost = mealItems.reduce((acc, cur) => acc + (cur.custo || 0), 0);
-            
-            const dishKey = `${state.activeWeek}_${state.activeDay}_${mealName}`;
+            const dishKey = `${state.activeWeek}_${state.activeDay}_${activeMeal}`;
             const dishName = state.dishNames?.[dishKey];
 
             return `
-              <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-md">
-                <div class="p-4 bg-slate-800/60 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
+              <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
+                <div class="p-4 bg-slate-800/70 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
                   <div class="flex items-center space-x-2 flex-wrap">
-                    <span class="font-bold text-base text-white">${mealName}</span>
+                    <span class="font-black text-base sm:text-lg text-white flex items-center gap-1.5">
+                      <span>${activeMeal}</span>
+                    </span>
                     ${dishName ? `
-                      <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-600/40 font-semibold truncate max-w-[200px]">
+                      <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-600/40 font-bold truncate max-w-[220px]">
                         🍽️ ${dishName}
                       </span>
                     ` : ''}
-                    <button onclick="window.app.openEditDishNameModal('${state.activeWeek}', '${state.activeDay}', '${mealName}')"
+                    <button onclick="window.app.openEditDishNameModal('${state.activeWeek}', '${state.activeDay}', '${activeMeal}')"
                             class="text-xs text-slate-400 hover:text-emerald-400 p-1" title="Editar nome do prato">
                       ✏️
                     </button>
-                    <span class="text-xs text-slate-400">(${mealItems.length} itens)</span>
+                    <span class="text-xs text-slate-400">(${mealItems.length} ingredientes)</span>
                   </div>
-                  <div class="flex items-center space-x-3">
-                    <span class="text-sm font-bold text-emerald-400">R$ ${mealCost.toFixed(2).replace('.', ',')}</span>
-                    <button onclick="window.app.openAddMealItemModal('${state.activeDay}', '${mealName}', ${state.activeWeek})"
-                            class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-2.5 py-1 rounded-lg transition shadow-sm">
-                      + Item
+
+                  <div class="flex items-center space-x-2 sm:space-x-3">
+                    <span class="text-sm font-extrabold text-emerald-400">R$ ${mealCost.toFixed(2).replace('.', ',')}</span>
+                    <button onclick="window.app.openAddMealItemModal('${state.activeDay}', '${activeMeal}', ${state.activeWeek})"
+                            class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition shadow-sm flex items-center gap-1">
+                      <span>+</span> <span>Item</span>
                     </button>
-                    <button onclick="window.app.duplicateSingleMeal('${state.activeDay}', '${mealName}', ${state.activeWeek})"
-                            class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-2.5 py-1 rounded-lg border border-slate-700 transition">
-                      Copiar
+                    <button onclick="window.app.duplicateSingleMeal('${state.activeDay}', '${activeMeal}', ${state.activeWeek})"
+                            class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 text-xs font-semibold px-2.5 py-1.5 rounded-xl border border-slate-700 transition">
+                      Copiar Refeição
                     </button>
                   </div>
                 </div>
 
                 <div class="divide-y divide-slate-800/60">
                   ${mealItems.length === 0 ? `
-                    <div class="p-4 text-center text-slate-500 text-sm">
-                      Nenhum ingrediente. Clique em "+ Item" para adicionar.
+                    <div class="p-8 text-center space-y-2">
+                      <div class="text-3xl opacity-50">🍽️</div>
+                      <p class="text-slate-400 text-sm font-medium">Nenhum ingrediente nesta refeição.</p>
+                      <button onclick="window.app.openAddMealItemModal('${state.activeDay}', '${activeMeal}', ${state.activeWeek})"
+                              class="px-4 py-2 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold hover:bg-emerald-600/30 transition">
+                        + Adicionar Primeiro Ingrediente
+                      </button>
                     </div>
                   ` : mealItems.map((item) => {
                     const ing = getIngredientByName(item.ingrediente_nome);
                     return `
                       <div onclick="window.app.openEditMealItemModal('${item.id}', ${state.activeWeek})"
-                           class="p-3.5 hover:bg-slate-800/50 flex items-center justify-between cursor-pointer transition gap-3">
-                        <div class="flex-1">
-                          <div class="flex items-center gap-2">
-                            <span class="font-semibold text-sm sm:text-base text-white">${item.ingrediente_nome}</span>
+                           class="p-3.5 hover:bg-slate-800/50 flex items-center justify-between cursor-pointer transition gap-3 group">
+                        <div class="flex-1 min-w-0">
+                          <div class="flex items-center gap-2 flex-wrap">
+                            <span class="font-bold text-sm sm:text-base text-white group-hover:text-emerald-300 transition truncate">${item.ingrediente_nome}</span>
                             ${ing ? `<span class="text-[10px] px-2 py-0.5 rounded-full font-medium ${getCategoryBadgeClass(ing.categoria)}">${ing.categoria}</span>` : ''}
                           </div>
                           <div class="text-xs text-slate-400 mt-1 flex flex-wrap gap-x-4 gap-y-1">
-                            <span>Porção: <strong>${item.porcao_pessoa} ${item.medida}</strong>/pessoa</span>
+                            <span>Porção: <strong class="text-slate-200">${item.porcao_pessoa} ${item.medida}</strong>/pessoa</span>
                             <span>Total Família: <strong class="text-slate-200">${item.qtd_total_familia} ${item.medida}</strong></span>
                             <span class="text-emerald-400 font-medium">Panela: <strong>${item.medida_caseira_str || '-'}</strong></span>
                           </div>
                         </div>
 
-                        <div class="text-right flex items-center space-x-3">
-                          <span class="font-bold text-sm text-slate-200">
+                        <div class="text-right flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
+                          <span class="font-black text-sm text-slate-200">
                             R$ ${(item.custo || 0).toFixed(2).replace('.', ',')}
                           </span>
-                          <span class="text-xs text-slate-500">›</span>
+                          <span class="text-xs text-slate-500 group-hover:text-emerald-400 transition">✏️</span>
                         </div>
                       </div>
                     `;
@@ -1183,7 +1252,7 @@
                 </div>
               </div>
             `;
-          }).join('')}
+          })()}
         </div>
       </div>
     `;
@@ -2684,14 +2753,21 @@
           </div>
         </div>
 
-        <div class="flex items-center justify-between pt-2">
-          <button onclick="window.app.deleteMenuItem('${item.id}', ${week})"
-                  class="px-3 py-2.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-600/30 text-xs font-bold transition">
-            Excluir Item
-          </button>
+        <div class="flex items-center justify-between pt-2 flex-wrap gap-2">
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="window.app.deleteMenuItem('${item.id}', ${week})"
+                    class="px-3 py-2.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-600/30 text-xs font-bold transition">
+              Excluir
+            </button>
 
-          <button onclick="window.app.saveEditedMenuItem('${item.id}', ${week})"
-                  class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm shadow-lg transition">
+            <button type="button" onclick="window.app.openCopyMealItemModal('${item.id}', ${week})"
+                    class="px-3 py-2.5 rounded-xl bg-blue-900/30 hover:bg-blue-800/50 text-blue-300 border border-blue-700/50 text-xs font-bold transition flex items-center gap-1.5 active:scale-95">
+              <span>📋</span> <span>Copiar p/ Outros Dias</span>
+            </button>
+          </div>
+
+          <button type="button" onclick="window.app.saveEditedMenuItem('${item.id}', ${week})"
+                  class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm shadow-lg transition active:scale-95">
             Salvar Alterações
           </button>
         </div>
@@ -2885,6 +2961,153 @@
       closeModal();
       showToast('Item atualizado com sucesso!', 'success');
     }
+  }
+
+  // --- COPIAR INGREDIENTE INDIVIDUAL PARA OUTROS DIAS DA SEMANA ---
+  function openCopyMealItemModal(itemId, week = state.activeWeek) {
+    const items = getActiveMenuItems(week);
+    const item = items.find((i) => i.id === itemId);
+    if (!item) return;
+
+    const ing = getIngredientByName(item.ingrediente_nome);
+    const allDays = getOrderedDaysOfWeek();
+
+    renderModal(`
+      <div class="space-y-4">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div>
+            <span class="text-[10px] font-semibold uppercase tracking-wider text-blue-400">Semana ${week} • Replicar Ingrediente</span>
+            <h3 class="text-lg font-bold text-white mt-0.5">${item.ingrediente_nome}</h3>
+          </div>
+          <button onclick="window.app.closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
+        </div>
+
+        <div class="p-3 bg-blue-950/40 border border-blue-800/60 rounded-xl space-y-1.5">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-blue-200">Refeição de Destino:</span>
+            <strong class="text-white bg-blue-900/60 px-2 py-0.5 rounded border border-blue-700/60">${item.refeicao}</strong>
+          </div>
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-blue-200">Porção Configurada:</span>
+            <strong class="text-emerald-400 font-bold">${item.porcao_pessoa} ${item.medida} (${item.medida_caseira_str || ''})</strong>
+          </div>
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-blue-200">Dia de Origem:</span>
+            <strong class="text-slate-300">${item.dia_nome}</strong>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-bold text-slate-300">Selecione os dias para copiar:</label>
+            <div class="flex items-center gap-1.5 text-[11px]">
+              <button type="button" onclick="document.querySelectorAll('.copy-day-cb').forEach(c => c.checked = true)"
+                      class="text-emerald-400 hover:underline font-semibold">Marcar Todos</button>
+              <span class="text-slate-600">•</span>
+              <button type="button" onclick="document.querySelectorAll('.copy-day-cb').forEach(c => { const d = c.value; c.checked = ['Segunda','Terça','Quarta','Quinta','Sexta'].includes(d); })"
+                      class="text-blue-400 hover:underline font-semibold">Seg a Sex</button>
+              <span class="text-slate-600">•</span>
+              <button type="button" onclick="document.querySelectorAll('.copy-day-cb').forEach(c => c.checked = false)"
+                      class="text-slate-400 hover:underline">Desmarcar</button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            ${allDays.map((d) => {
+              const isSource = d === item.dia_nome;
+              const dayItems = items.filter(i => i.dia_nome === d && i.refeicao === item.refeicao);
+              const alreadyHas = dayItems.some(i => i.ingrediente_nome === item.ingrediente_nome);
+
+              return `
+                <label class="flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition ${isSource ? 'bg-slate-800/40 border-slate-700/40 opacity-70' : 'bg-slate-900 border-slate-800 hover:border-slate-700'}">
+                  <div class="flex items-center gap-2.5">
+                    <input type="checkbox" value="${d}" class="copy-day-cb w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 bg-slate-950 border-slate-700">
+                    <div>
+                      <span class="font-bold text-xs text-white">${d}</span>
+                      ${isSource ? '<span class="text-[9px] text-blue-400 ml-1.5 font-normal">(Origem)</span>' : ''}
+                      ${alreadyHas && !isSource ? '<span class="text-[9px] text-amber-400 ml-1.5 font-normal">(Já tem • atualizará)</span>' : ''}
+                    </div>
+                  </div>
+                  <span class="text-[11px] text-slate-400">${item.refeicao}</span>
+                </label>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <div class="pt-2 flex items-center gap-2">
+          <button type="button" onclick="window.app.openEditMealItemModal('${itemId}', ${week})"
+                  class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition">
+            Voltar
+          </button>
+          <button type="button" onclick="window.app.confirmCopyMealItemToDays('${itemId}', ${week})"
+                  class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs sm:text-sm shadow-lg transition">
+            Copiar Ingrediente
+          </button>
+        </div>
+      </div>
+    `);
+  }
+
+  function confirmCopyMealItemToDays(itemId, week = state.activeWeek) {
+    const checkboxes = document.querySelectorAll('.copy-day-cb:checked');
+    const targetDays = Array.from(checkboxes).map(c => c.value);
+
+    if (targetDays.length === 0) {
+      showToast('Selecione pelo menos um dia para copiar o ingrediente.', 'warning');
+      return;
+    }
+
+    const items = getActiveMenuItems(week);
+    const sourceItem = items.find((i) => i.id === itemId);
+    if (!sourceItem) return;
+
+    const ing = getIngredientByName(sourceItem.ingrediente_nome);
+    if (!ing) return;
+
+    if (!state.menuByWeek[week]) state.menuByWeek[week] = [];
+    const weekItems = state.menuByWeek[week];
+
+    let copiedCount = 0;
+
+    targetDays.forEach((targetDay) => {
+      const existingIdx = weekItems.findIndex(i => 
+        i.dia_nome === targetDay && 
+        i.refeicao === sourceItem.refeicao && 
+        i.ingrediente_nome === sourceItem.ingrediente_nome
+      );
+
+      const computed = computeMenuItemFromPortion(sourceItem.porcao_pessoa, ing);
+
+      if (existingIdx !== -1) {
+        weekItems[existingIdx] = {
+          ...weekItems[existingIdx],
+          porcao_pessoa: computed.porcao_pessoa,
+          qtd_total_familia: computed.qtd_total_familia,
+          medida_caseira_str: computed.medida_caseira_str,
+          custo: computed.custo
+        };
+      } else {
+        weekItems.push({
+          id: `menu_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+          dia_cod: targetDay,
+          dia_nome: targetDay,
+          refeicao: sourceItem.refeicao,
+          ingrediente_nome: sourceItem.ingrediente_nome,
+          porcao_pessoa: computed.porcao_pessoa,
+          medida: sourceItem.medida,
+          qtd_total_familia: computed.qtd_total_familia,
+          medida_caseira_str: computed.medida_caseira_str,
+          custo: computed.custo
+        });
+      }
+      copiedCount++;
+    });
+
+    saveState();
+    renderApp();
+    closeModal();
+    showToast(`Ingrediente ${sourceItem.ingrediente_nome} copiado para ${copiedCount} dia(s) no ${sourceItem.refeicao}!`, 'success');
   }
 
   function deleteMenuItem(itemId, week = state.activeWeek) {
@@ -5564,6 +5787,13 @@
     handleSwapIngredient,
     saveEditedMenuItem,
     deleteMenuItem,
+    openCopyMealItemModal,
+    confirmCopyMealItemToDays,
+    setActiveMenuMeal: (meal) => {
+      state.activeMenuMeal = meal;
+      saveState();
+      renderApp();
+    },
     openAddMealItemModal,
     updateNewMealIngredientPreview,
     confirmAddMealItem,
