@@ -218,6 +218,7 @@
     activeKitchenMeal: 'Almoço',
     activeMenuMeal: 'Almoço',
     shoppingViewFilter: 'all',
+    showProjection: false,
     supabaseConfig: { url: 'https://deydppcfgyqbudzqiqty.supabase.co', key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRleWRwcGNmZ3lxYnVkenFpcXR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMxNTMyMjEsImV4cCI6MjEwODcyOTIyMX0.zetBuSXxlB3uvFxBkBjEvp9VimsG1E9hvRxKp4JRaZs', autoSync: true },
     lastSync: null
   };
@@ -322,6 +323,7 @@
     }
     if (!state.menuByWeek) state.menuByWeek = {};
       if (!state.completedTurnovers) state.completedTurnovers = {};
+    state.showProjection = false;
       if (!state.firstDayOfWeek) state.firstDayOfWeek = 'Segunda';
       if (!state.cycleStartDate) state.cycleStartDate = '2026-11-02';
       const base = (Array.isArray(state.menuItems) && state.menuItems.length > 0) ? state.menuItems : (window.INITIAL_SEED_DATA?.menu_items || []);
@@ -519,7 +521,8 @@
 
   // 5-Weeks Cascade Shopping Calculation Engine
   // Each week uses its OWN cardápio consumption and carries over verified leftovers
-  function calculate5WeeksCascade() {
+  function calculate5WeeksCascade(forceProjection = false) {
+    const isProjection = forceProjection || !!state.showProjection;
     const results = [];
     const consumptionsByWeek = {};
     for (let w = 1; w <= 5; w++) {
@@ -549,8 +552,8 @@
       for (let w = 1; w <= 5; w++) {
         const consumoSemanal = Math.round((consumptionsByWeek[w][name] || 0) * 100) / 100;
 
-        // Check if there was a manual adjustment from turnover for this week
-        if (state.pantryAdjustments[`w${w}_${name}`] !== undefined) {
+        // Se houver ajuste manual e estiver em modo projeção:
+        if (isProjection && state.pantryAdjustments[`w${w}_${name}`] !== undefined) {
           estoqueDisponivel = state.pantryAdjustments[`w${w}_${name}`];
         }
 
@@ -560,15 +563,42 @@
         let sobraProximaSemana = 0;
 
         const isPeso = (ing.tipo_compra || ing.tipo_venda) === 'Peso';
+
         if (isPeso) {
           qtdComprar = falta;
           custoEstimado = ing.tamanho_pacote > 0 ? (qtdComprar / ing.tamanho_pacote) * ing.preco_pacote : 0;
-          sobraProximaSemana = Math.max(0, estoqueDisponivel - consumoSemanal);
         } else {
-          // Pacote or Unidade
           qtdComprar = falta > 0 && ing.tamanho_pacote > 0 ? Math.ceil(falta / ing.tamanho_pacote) : 0;
           custoEstimado = qtdComprar * ing.preco_pacote;
-          sobraProximaSemana = estoqueDisponivel + (qtdComprar * ing.tamanho_pacote) - consumoSemanal;
+        }
+
+        if (isProjection) {
+          // PROJEÇÃO TEÓRICA: Assume compra planejada integral
+          if (isPeso) {
+            sobraProximaSemana = Math.max(0, estoqueDisponivel - consumoSemanal);
+          } else {
+            sobraProximaSemana = estoqueDisponivel + (qtdComprar * ing.tamanho_pacote) - consumoSemanal;
+          }
+        } else {
+          // MODO TEMPO REAL: Baseado no checkbox de compra real da semana
+          if (qtdComprar > 0) {
+            const isBought = !!(state.cartChecked[`${w}_cascade_${name}`] || state.cartChecked[`${w}_${name}`]);
+            if (isBought) {
+              const adj = state.adjustedPrices?.[`${w}_cascade_${name}`] || state.adjustedPrices?.[`${w}_${name}`];
+              const actualBoughtQty = (adj?.qty !== undefined) ? adj.qty : qtdComprar;
+              if (isPeso) {
+                sobraProximaSemana = Math.max(0, estoqueDisponivel + actualBoughtQty - consumoSemanal);
+              } else {
+                sobraProximaSemana = estoqueDisponivel + (actualBoughtQty * ing.tamanho_pacote) - consumoSemanal;
+              }
+            } else {
+              // NÃO COMPRADO: sobra do que não comprou é 0
+              sobraProximaSemana = Math.max(0, estoqueDisponivel - consumoSemanal);
+            }
+          } else {
+            // Já estava coberto pelo estoque
+            sobraProximaSemana = Math.max(0, estoqueDisponivel - consumoSemanal);
+          }
         }
 
         row.weeks.push({
@@ -1308,57 +1338,50 @@
 
   // --- SCREEN 3: COMPRAS DA SEMANA (SUPERMARKET MODE - ONE HAND UX) ---
   
-  // Helper: Renderiza o botão de virada com proteção de segurança
-  function renderTurnoverButton(week) {
-    const isCompleted = !!state.completedTurnovers?.[week];
-
-    // Se já foi concluída: botão de segurança consolidado
-    if (isCompleted) {
-      if (week === 5) {
-        return `
-          <button onclick="window.app.openCycleTurnoverModal()"
-                  class="px-3.5 py-2 rounded-xl bg-emerald-950/80 hover:bg-emerald-900/90 text-emerald-300 border border-emerald-600/60 active:scale-95 text-xs sm:text-sm font-bold flex items-center gap-1.5 transition shadow-sm">
-            <span>🏆</span> <span>Ciclo Concluído • Novo Ciclo</span>
-          </button>
-        `;
-      }
-      return `
-        <button onclick="window.app.promptReopenTurnover(${week})"
-                class="px-3 py-2 rounded-xl bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-600/50 text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition shadow-sm"
-                title="Virada da Semana ${week} já consolidada. Clique para reabrir caso necessário.">
-          <span>✓</span> <span>Semana ${week} Concluída</span>
-        </button>
-      `;
-    }
-
-    // Se for semana futura (bloqueada até concluir as anteriores)
-    if (week > state.activeWeek) {
-      return `
-        <button disabled
-                class="px-3 py-2 rounded-xl bg-slate-800/40 text-slate-500 border border-slate-800 text-xs sm:text-sm font-semibold flex items-center gap-1.5 cursor-not-allowed opacity-60"
-                title="Conclua a Semana ${state.activeWeek} antes de virar esta semana">
-          <span>🔒</span> <span>Virada Bloqueada</span>
-        </button>
-      `;
-    }
-
-    // Se for a última semana (Semana 5)
+  // Helper: Botão de Alternância entre Modo Real (Tempo Real) e Modo Projeção
+  function renderProjectionToggleButton(week) {
+    const isProj = !!state.showProjection;
+    let cycleBtn = '';
     if (week === 5) {
-      return `
+      cycleBtn = `
         <button onclick="window.app.openCycleTurnoverModal()"
-                class="px-3.5 py-2 rounded-xl bg-amber-950/80 hover:bg-amber-900/90 text-amber-300 border border-amber-600/60 active:scale-95 text-xs sm:text-sm font-bold flex items-center gap-1.5 transition shadow-sm">
-          <span>🏆</span> <span>Concluir Ciclo de 5 Semanas</span>
+                class="px-3.5 py-2 rounded-xl bg-amber-950/80 hover:bg-amber-900/90 text-amber-300 border border-amber-600/60 active:scale-95 text-xs sm:text-sm font-bold flex items-center gap-1.5 transition shadow-sm"
+                title="Concluir Ciclo de 5 Semanas e arquivar no histórico">
+          <span>🏆</span> <span>Concluir Ciclo</span>
         </button>
       `;
     }
-    // Semana ativa pronta para virar (Semana X -> X+1)
+
+    if (isProj) {
+      return `
+        <button onclick="window.app.toggleShoppingProjection()"
+                class="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 transition shadow-lg shadow-purple-900/40"
+                title="Voltar para a Lista de Compras em Tempo Real">
+          <span>🛒</span> <span>Modo Real</span>
+        </button>
+        ${cycleBtn}
+      `;
+    }
+
     return `
-      <button onclick="window.app.openTurnoverModal(${week})"
-              class="px-3 py-2 rounded-xl bg-amber-950/60 hover:bg-amber-900/70 text-amber-300 border border-amber-600/50 active:scale-95 text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition shadow-sm"
-              title="Conferir estoque e avançar para a Semana ${week + 1}">
-        <span>🔄</span> <span>Virar p/ Semana ${week + 1}</span>
+      <button onclick="window.app.toggleShoppingProjection()"
+              class="px-3.5 py-2 rounded-xl bg-purple-950/70 hover:bg-purple-900/80 active:scale-95 text-purple-300 border border-purple-600/50 text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition shadow-sm"
+              title="Visualizar a Projeção Teórica das 5 Semanas com valores ideais">
+        <span>👁️</span> <span>Ver Projeção</span>
       </button>
+      ${cycleBtn}
     `;
+  }
+
+  function toggleShoppingProjection() {
+    state.showProjection = !state.showProjection;
+    saveState();
+    renderApp();
+    if (state.showProjection) {
+      showToast('Visualizando Projeção Teórica das 5 Semanas!', 'info');
+    } else {
+      showToast('Modo Tempo Real ativado!', 'success');
+    }
   }
 
   function setShoppingViewFilter(mode) {
@@ -1504,7 +1527,15 @@
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <div>
               <div class="flex items-center gap-2">
-                <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Modo Supermercado</span>
+                ${state.showProjection ? `
+                <span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1 shadow-sm">
+                  <span>👁️</span> <span>Modo Projeção Teórica</span>
+                </span>
+              ` : `
+                <span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shadow-sm">
+                  <span>⚡</span> <span>Modo Tempo Real</span>
+                </span>
+              `}
                 <span class="text-xs text-slate-400">Cardápio da Semana ${currentWeekIdx}</span>
               </div>
               <h2 class="text-xl sm:text-2xl font-black text-white mt-1">
@@ -1520,7 +1551,7 @@
                 <span>WhatsApp</span>
               </button>
 
-              ${renderTurnoverButton(currentWeekIdx)}
+              ${renderProjectionToggleButton(currentWeekIdx)}
 
               <button onclick="window.app.openAddExtraItemModal(${currentWeekIdx})"
                       class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-emerald-400 border border-slate-700 text-xs sm:text-sm font-semibold flex items-center gap-1 transition">
@@ -1620,21 +1651,36 @@
           </div>
         </div>
 
-        <!-- Banner de Herança de Estoque (se a semana anterior já fez virada) -->
-        ${(state.completedTurnovers?.[currentWeekIdx - 1]) ? `
-          <div class="p-3.5 bg-emerald-950/40 border border-emerald-600/40 rounded-2xl flex items-center justify-between gap-3 text-xs text-emerald-200 shadow-sm">
+        <!-- Banner de Modo: Projeção Teórica vs Tempo Real Dinâmico -->
+        ${state.showProjection ? `
+          <div class="p-3.5 bg-purple-950/40 border border-purple-600/40 rounded-2xl flex items-center justify-between gap-3 text-xs text-purple-200 shadow-sm">
             <div class="flex items-center gap-2.5">
-              <span class="text-xl">📦</span>
+              <span class="text-2xl">👁️</span>
               <div>
-                <strong class="text-emerald-300 block">Estoque Inicial Atualizado</strong>
-                <span>Saldos herdados da conferência da <strong>Semana ${currentWeekIdx - 1}</strong>.</span>
+                <strong class="text-purple-300 block text-sm">Visualizando Projeção Teórica das 5 Semanas</strong>
+                <span>Exibindo o planejamento ideal com valores de compra e sobras calculadas. As marcações do carrinho não alteram esta prévia.</span>
               </div>
             </div>
-            <span class="text-[11px] font-medium text-emerald-400 bg-emerald-900/60 px-2.5 py-1 rounded-full border border-emerald-700/50 whitespace-nowrap">
-              ${state.completedTurnovers[currentWeekIdx - 1].formattedDate || 'Consolidado'}
-            </span>
+            <button onclick="window.app.toggleShoppingProjection()"
+                    class="shrink-0 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition shadow-md">
+              Voltar ao Real
+            </button>
           </div>
-        ` : ''}
+        ` : (currentWeekIdx > 1 ? `
+          <div class="p-3 bg-emerald-950/30 border border-emerald-700/40 rounded-2xl flex items-center justify-between gap-3 text-xs text-emerald-200 shadow-sm">
+            <div class="flex items-center gap-2.5">
+              <span class="text-lg">⚡</span>
+              <div>
+                <strong class="text-emerald-300 block">Estoque em Tempo Real Ativo</strong>
+                <span>O armário e as compras da Semana ${currentWeekIdx} estão calculados automaticamente pelo que você marcou na Semana ${currentWeekIdx - 1}.</span>
+              </div>
+            </div>
+            <button onclick="window.app.toggleShoppingProjection()"
+                    class="shrink-0 text-[11px] text-purple-300 hover:text-purple-200 underline whitespace-nowrap">
+              Ver projeção teórica
+            </button>
+          </div>
+        ` : '')}
 
         <!-- Informative Banner when ALL items are covered -->
         ${totalToBuyCount === 0 && totalInStockCount > 0 ? `
@@ -6724,6 +6770,8 @@
   }
 
     window.app = {
+    calculate5WeeksCascade,
+    toggleShoppingProjection,
     switchTab: (tabId) => {
       state.activeTab = tabId;
       renderApp();
