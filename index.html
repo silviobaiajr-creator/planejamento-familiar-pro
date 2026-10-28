@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1120">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="Planejamento Familiar Pro - Cardápio Semanal Dinâmico, Medida da Panela e Compras de 5 Semanas">
+  <title>Planejamento Familiar Pro</title>
+
+  <!-- PWA Manifest & Favicon -->
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍳</text></svg>">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍳</text></svg>">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857',
+              900: '#064e3b'
+            }
+          },
+          screens: {
+            'xs': '420px'
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="./styles.css?v=14">
+</head>
+<body class="bg-[#0b1120] text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-emerald-500 selection:text-white">
+
+  <!-- Header Section (Sticky Top) -->
+  <header id="app-header" class="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 shadow-sm"></header>
+
+  <!-- Top Navigation (Desktop & Tablet Quick Tabs) -->
+  <nav id="top-navigation" class="bg-slate-900/50 backdrop-blur-sm z-30"></nav>
+
+  <!-- Main View Container -->
+  <main class="flex-1 max-w-6xl w-full mx-auto p-3 sm:p-6 pb-28 sm:pb-16">
+    <div id="main-content">
+      <!-- Loading Skeleton -->
+      <div class="flex flex-col items-center justify-center py-24 space-y-4">
+        <div class="w-12 h-12 rounded-full border-4 border-emerald-500/20 border-t-emerald-500 animate-spin"></div>
+        <p class="text-sm font-semibold text-slate-400">Carregando Planejamento Familiar Pro...</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Mobile Bottom Navigation (Visible on phones) -->
+  <nav id="bottom-navigation" class="fixed bottom-0 left-0 right-0 z-40 sm:hidden"></nav>
+
+  <!-- Toast Notification Container -->
+  <div id="app-toast-container" class="toast-container"></div>
+
+  <!-- Modal Container -->
+  <div id="app-modal-container"></div>
+
+  <!-- Scripts -->
+  <script src="./seed_data.js?v=14"></script>
+  <script src="./app.js?v=14"></script>
+</body>
+</html>

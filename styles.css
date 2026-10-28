@@ -1,0 +1,157 @@
+/* Planejamento Familiar Pro - Custom Styles & Mobile-First UX */
+
+:root {
+  --primary: #10b981;
+  --primary-hover: #059669;
+  --primary-light: #ecfdf5;
+  --primary-dark: #064e3b;
+  --accent: #f59e0b;
+  --bg-main: #0b1120;
+  --bg-card: #1e293b;
+  --bg-card-hover: #334155;
+  --border-color: #334155;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --danger: #ef4444;
+  --danger-light: #fef2f2;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Allow text selection inside modals and inputs */
+input, textarea, select, .selectable-text {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Hide scrollbar for clean tab carousels */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Modal and Bottom Sheet Animations */
+.modal-backdrop {
+  background-color: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(4px);
+  transition: opacity 0.2s ease-in-out;
+}
+
+.bottom-sheet {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (max-width: 640px) {
+  .bottom-sheet-mobile {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-height: 90vh;
+    border-top-left-radius: 1.5rem;
+    border-top-right-radius: 1.5rem;
+  }
+}
+
+/* Strikethrough Cart animation */
+.cart-item-checked {
+  opacity: 0.55;
+  background-color: rgba(30, 41, 59, 0.4) !important;
+}
+.cart-item-checked .item-title {
+  text-decoration: line-through;
+  color: #94a3b8;
+}
+
+/* Active Tab Indicator */
+.tab-active {
+  background-color: #10b981 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+  font-weight: 600;
+}
+
+.day-tab-active {
+  background-color: #3b82f6 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
+  font-weight: 600;
+}
+
+/* Badge styles */
+.badge-mercearia { background-color: #78350f; color: #fde68a; }
+.badge-carnes { background-color: #881337; color: #fecdd3; }
+.badge-hortifruti { background-color: #14532d; color: #bbf7d0; }
+.badge-laticinios { background-color: #1e3a8a; color: #bfdbfe; }
+.badge-higiene { background-color: #581c87; color: #e9d5ff; }
+.badge-outros { background-color: #374151; color: #e5e7eb; }
+
+/* Safe padding for iOS Safari bottom bar */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+
+/* Toast Notifications */
+.toast-container {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  left: 1rem;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  animation: toastIn 0.25s ease-out forwards;
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Touch feedback ripple */
+button:active, .clickable:active {
+  transform: scale(0.98);
+  transition: transform 0.05s ease;
+}
+
+/* Table styles for 5-week cascade */
+.cascade-table th, .cascade-table td {
+  white-space: nowrap;
+}
