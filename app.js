@@ -1960,6 +1960,73 @@
   }
 
   // --- SCREEN 6: INGREDIENTES & CONFIGURAÇÕES (CRUD 100%) ---
+  function renderIngredientsCatalogCardsHTML(filtered) {
+    const rawSearch = (window.__ingSearchQuery || '').trim();
+    if (!filtered || filtered.length === 0) {
+      return `
+        <div class="col-span-full py-12 px-4 text-center bg-slate-900/80 border-2 border-dashed border-slate-700/80 rounded-2xl space-y-4">
+          <div class="w-14 h-14 mx-auto rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-3xl shadow-inner">
+            🔍
+          </div>
+          <div class="space-y-1">
+            <h4 class="font-bold text-white text-base sm:text-lg">Nenhum ingrediente encontrado</h4>
+            <p class="text-xs sm:text-sm text-slate-400 max-w-md mx-auto">
+              ${rawSearch ? `Não encontramos nenhum item chamado "<strong class="text-emerald-400 font-semibold">${rawSearch}</strong>" no catálogo.` : 'Nenhum ingrediente cadastrado para esta categoria.'}
+            </p>
+          </div>
+          ${rawSearch ? `
+            <div class="pt-2">
+              <button onclick="window.app.openAddIngredientModal('${rawSearch.replace(/'/g, "\\'")}')"
+                      class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs sm:text-sm shadow-xl transition">
+                <span>➕</span>
+                <span>Cadastrar "${rawSearch}" no Catálogo</span>
+              </button>
+            </div>
+          ` : `
+            <div class="pt-2">
+              <button onclick="window.app.openAddIngredientModal()"
+                      class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs sm:text-sm shadow-md transition">
+                <span>➕</span>
+                <span>Cadastrar Novo Ingrediente</span>
+              </button>
+            </div>
+          `}
+        </div>
+      `;
+    }
+
+    return filtered.map((ing) => `
+      <div onclick="window.app.openEditIngredientModal('${ing.id}')"
+           class="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl p-4 cursor-pointer transition shadow-sm space-y-2 group">
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <h4 class="font-bold text-base text-white group-hover:text-emerald-300 transition">${ing.nome}</h4>
+            <span class="text-[10px] px-2 py-0.5 rounded-full font-medium ${getCategoryBadgeClass(ing.categoria)}">
+              ${ing.categoria}
+            </span>
+          </div>
+          <div class="text-right">
+            <span class="font-black text-sm text-emerald-400 block">
+              R$ ${ing.preco_pacote.toFixed(2).replace('.', ',')}
+            </span>
+            <span class="text-[10px] text-slate-400">por ${(ing.tipo_compra || ing.tipo_venda || 'Pacote').toLowerCase()}</span>
+          </div>
+        </div>
+
+        <div class="text-xs text-slate-400 space-y-1 pt-1 border-t border-slate-800">
+          <div class="flex justify-between">
+            <span>Pacote/Embalagem:</span>
+            <strong class="text-slate-200">${ing.tamanho_pacote} ${ing.medida || ing.unidade_pacote || 'un'}</strong>
+          </div>
+          <div class="flex justify-between">
+            <span>Base porção:</span>
+            <strong class="text-slate-200">${ing.peso_porcao_base} ${ing.medida || ing.unidade_pacote || 'un'} (${ing.nome_medida_caseira || ''})</strong>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
   function renderIngredientsCatalog(container) {
     const categories = ['Todos', 'Mercearia', 'Carnes/Ovos', 'Hortifrúti', 'Laticínios/Padaria', 'Outros'];
     const activeCategory = window.__ingCategoryFilter || 'Todos';
@@ -1977,30 +2044,32 @@
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
             <div>
               <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Módulo 1</span>
-              <h2 class="text-2xl font-black text-white mt-1">Catálogo de Ingredientes (53 Itens)</h2>
-              <p class="text-xs sm:text-sm text-slate-400 mt-0.5">
-                Total de ${state.ingredients.length} ingredientes configurados. Edite preços, embalagens e medidas caseiras.
+              <h2 class="text-2xl font-black text-white mt-1">Catálogo de Ingredientes</h2>
+              <p id="ing-catalog-subtitle" class="text-xs sm:text-sm text-slate-400 mt-0.5">
+                Mostrando ${filtered.length} de ${state.ingredients.length} ingredientes. Edite preços, embalagens e medidas caseiras.
               </p>
             </div>
             <button onclick="window.app.openAddIngredientModal()"
-                    class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-md transition self-start sm:self-auto">
+                    class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-md transition self-start sm:self-auto active:scale-95">
               <span>+ Novo Ingrediente</span>
             </button>
           </div>
 
           <div class="flex flex-col sm:flex-row gap-3">
             <div class="relative flex-1">
+              <span class="absolute left-3.5 top-3 text-slate-400 text-sm">🔍</span>
               <input type="text"
+                     id="ing-catalog-search-input"
                      placeholder="Buscar ingrediente por nome..."
                      value="${window.__ingSearchQuery || ''}"
-                     oninput="window.__ingSearchQuery = this.value; window.app.renderApp();"
-                     class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500">
+                     oninput="window.app.handleIngredientSearch(this.value)"
+                     class="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500">
             </div>
           </div>
 
-          <div class="flex space-x-1.5 overflow-x-auto no-scrollbar mt-3">
+          <div id="ing-categories-bar" class="flex space-x-1.5 overflow-x-auto no-scrollbar mt-3">
             ${categories.map((cat) => `
-              <button onclick="window.__ingCategoryFilter = '${cat}'; window.app.renderApp();"
+              <button onclick="window.app.setIngredientCategoryFilter('${cat}')"
                       class="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${activeCategory === cat ? 'tab-active' : 'bg-slate-800 text-slate-400 hover:text-white'}">
                 ${cat}
               </button>
@@ -2008,40 +2077,47 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-          ${filtered.map((ing) => `
-            <div onclick="window.app.openEditIngredientModal('${ing.id}')"
-                 class="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl p-4 cursor-pointer transition shadow-sm space-y-2 group">
-              <div class="flex items-start justify-between gap-2">
-                <div>
-                  <h4 class="font-bold text-base text-white group-hover:text-emerald-300 transition">${ing.nome}</h4>
-                  <span class="text-[10px] px-2 py-0.5 rounded-full font-medium ${getCategoryBadgeClass(ing.categoria)}">
-                    ${ing.categoria}
-                  </span>
-                </div>
-                <div class="text-right">
-                  <span class="font-black text-sm text-emerald-400 block">
-                    R$ ${ing.preco_pacote.toFixed(2).replace('.', ',')}
-                  </span>
-                  <span class="text-[10px] text-slate-400">por ${(ing.tipo_compra || ing.tipo_venda || 'Pacote').toLowerCase()}</span>
-                </div>
-              </div>
-
-              <div class="text-xs text-slate-400 space-y-1 pt-1 border-t border-slate-800">
-                <div class="flex justify-between">
-                  <span>Pacote/Embalagem:</span>
-                  <strong class="text-slate-200">${ing.tamanho_pacote} ${ing.medida || ing.unidade_pacote || 'un'}</strong>
-                </div>
-                <div class="flex justify-between">
-                  <span>Base porção:</span>
-                  <strong class="text-slate-200">${ing.peso_porcao_base} ${ing.medida || ing.unidade_pacote || 'un'} (${ing.nome_medida_caseira || ''})</strong>
-                </div>
-              </div>
-            </div>
-          `).join('')}
+        <div id="ing-catalog-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          ${renderIngredientsCatalogCardsHTML(filtered)}
         </div>
       </div>
     `;
+  }
+
+  function handleIngredientSearch(query) {
+    window.__ingSearchQuery = query;
+    const activeCategory = window.__ingCategoryFilter || 'Todos';
+    const searchQuery = (query || '').toLowerCase().trim();
+
+    const filtered = state.ingredients.filter((ing) => {
+      const matchCat = activeCategory === 'Todos' || ing.categoria === activeCategory;
+      const matchSearch = !searchQuery || ing.nome.toLowerCase().includes(searchQuery);
+      return matchCat && matchSearch;
+    });
+
+    const grid = document.getElementById('ing-catalog-grid');
+    if (grid) {
+      grid.innerHTML = renderIngredientsCatalogCardsHTML(filtered);
+    }
+    const subtitle = document.getElementById('ing-catalog-subtitle');
+    if (subtitle) {
+      subtitle.innerHTML = `Mostrando ${filtered.length} de ${state.ingredients.length} ingredientes. Edite preços, embalagens e medidas caseiras.`;
+    }
+  }
+
+  function setIngredientCategoryFilter(cat) {
+    window.__ingCategoryFilter = cat;
+    const categories = ['Todos', 'Mercearia', 'Carnes/Ovos', 'Hortifrúti', 'Laticínios/Padaria', 'Outros'];
+    const bar = document.getElementById('ing-categories-bar');
+    if (bar) {
+      bar.innerHTML = categories.map((c) => `
+        <button onclick="window.app.setIngredientCategoryFilter('${c}')"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${c === cat ? 'tab-active' : 'bg-slate-800 text-slate-400 hover:text-white'}">
+          ${c}
+        </button>
+      `).join('');
+    }
+    handleIngredientSearch(window.__ingSearchQuery || '');
   }
 
   // --- SCREEN 7: CONFIGURAÇÕES, BACKUP & REDE ---
@@ -2675,10 +2751,119 @@
     showToast('Ingrediente removido da refeição.', 'info');
   }
 
-  // Add Item to Meal Modal
-  function openAddMealItemModal(day, meal, week = state.activeWeek) {
+  // Add Item to Meal Modal with Search & Quick Add
+  let selectedMealIngredient = null;
+
+  function renderAddMealResultsHTML(filtered, currentSelectedName) {
+    const rawSearch = (window.__addMealSearchQuery || '').trim();
+    if (!filtered || filtered.length === 0) {
+      return `
+        <div class="p-4 text-center space-y-2 bg-slate-900/80 rounded-xl border border-dashed border-slate-700">
+          <p class="text-xs text-slate-400">Nenhum ingrediente com o nome "<strong class="text-emerald-400 font-semibold">${rawSearch}</strong>" no catálogo.</p>
+          <button onclick="window.app.openAddIngredientModal('${rawSearch.replace(/'/g, "\\'")}')"
+                  class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-md transition">
+            <span>➕</span> <span>Cadastrar "${rawSearch}" no Catálogo</span>
+          </button>
+        </div>
+      `;
+    }
+
+    return filtered.map((ing) => {
+      const isSelected = ing.nome === currentSelectedName;
+      return `
+        <div onclick="window.app.selectMealIngredient('${ing.nome.replace(/'/g, "\\'")}')"
+             class="flex items-center justify-between p-2.5 rounded-xl border transition cursor-pointer active:scale-[0.99] ${isSelected ? 'bg-emerald-950/70 border-emerald-500 text-white shadow-sm ring-1 ring-emerald-500/50' : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-800/80'}">
+          <div class="flex-1 min-w-0 pr-2">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-bold text-xs sm:text-sm text-white truncate">${ing.nome}</span>
+              <span class="text-[9px] px-1.5 py-0.5 rounded font-medium ${getCategoryBadgeClass(ing.categoria)}">
+                ${ing.categoria}
+              </span>
+            </div>
+            <span class="text-[11px] text-slate-400 block mt-0.5">
+              Pacote: ${ing.tamanho_pacote} ${ing.medida} • R$ ${ing.preco_pacote.toFixed(2).replace('.', ',')}
+            </span>
+          </div>
+          <div class="flex-shrink-0 text-right">
+            ${isSelected ? `
+              <span class="text-xs font-bold text-emerald-400 bg-emerald-500/20 px-2 py-1 rounded-lg border border-emerald-500/40 inline-flex items-center gap-1">
+                <span>✓</span> <span class="hidden xs:inline">Selecionado</span>
+              </span>
+            ` : `
+              <span class="text-xs text-slate-400 hover:text-emerald-400 font-semibold px-2 py-1 rounded-lg bg-slate-800 border border-slate-700">
+                Escolher
+              </span>
+            `}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderSelectedMealIngredientPreview(ing) {
+    if (!ing) {
+      return `
+        <div class="text-center py-2 text-xs text-slate-400">
+          Nenhum ingrediente selecionado. Escolha um item da lista acima.
+        </div>
+      `;
+    }
+
+    const defaultPortion = ing.peso_porcao_base || 50;
+    const familyCount = state.familyMembers || 3;
+    const initialCost = ((defaultPortion * familyCount * (ing.preco_pacote || 0)) / (ing.tamanho_pacote || 1));
+
+    return `
+      <div class="flex items-center justify-between border-b border-slate-700/60 pb-2">
+        <div>
+          <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Ingrediente Selecionado:</span>
+          <h4 class="font-extrabold text-sm sm:text-base text-emerald-300">${ing.nome}</h4>
+        </div>
+        <input type="hidden" id="new-meal-ing" value="${ing.nome}">
+        <span class="text-xs font-semibold text-slate-300 bg-slate-800 px-2 py-1 rounded-lg border border-slate-700">
+          ${ing.tamanho_pacote} ${ing.medida}
+        </span>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 pt-2">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Porção / Pessoa:</label>
+          <div class="flex items-center space-x-1.5">
+            <button type="button" onclick="const p = document.getElementById('new-meal-portion'); p.value = Math.max(1, (parseFloat(p.value)||0) - 10); window.app.updateNewMealCostPreview();"
+                    class="w-8 h-8 rounded-lg bg-slate-700 hover:bg-slate-600 active:scale-95 text-white font-bold text-sm flex items-center justify-center transition">
+              -
+            </button>
+            <input type="number" step="any" min="0" id="new-meal-portion" value="${defaultPortion}"
+                   oninput="window.app.updateNewMealCostPreview()"
+                   class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-center text-sm font-bold text-emerald-400 focus:outline-none focus:border-emerald-500">
+            <button type="button" onclick="const p = document.getElementById('new-meal-portion'); p.value = (parseFloat(p.value)||0) + 10; window.app.updateNewMealCostPreview();"
+                    class="w-8 h-8 rounded-lg bg-slate-700 hover:bg-slate-600 active:scale-95 text-white font-bold text-sm flex items-center justify-center transition">
+              +
+            </button>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Unidade & Custo Família:</label>
+          <div class="flex items-center justify-between bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 h-8">
+            <input type="text" id="new-meal-unit" value="${ing.medida || 'g'}" readonly
+                   class="w-10 bg-transparent text-xs font-bold text-slate-300 focus:outline-none">
+            <span id="new-meal-cost-preview" class="text-xs font-black text-emerald-400">
+              R$ ${initialCost.toFixed(2).replace('.', ',')}
+            </span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function openAddMealItemModal(day, meal, week = state.activeWeek, preselectedIngName = null) {
+    window.__addMealSearchQuery = '';
+    window.__addMealCategoryFilter = 'Todos';
+    window.__pendingMealContext = { day, meal, week };
+
     const sortedIngs = [...state.ingredients].sort((a, b) => a.nome.localeCompare(b.nome));
-    const firstIng = sortedIngs[0];
+    const initialIng = preselectedIngName ? getIngredientByName(preselectedIngName) : sortedIngs[0];
+    selectedMealIngredient = initialIng ? initialIng.nome : (sortedIngs[0]?.nome || '');
 
     renderModal(`
       <div class="space-y-4">
@@ -2687,54 +2872,110 @@
             <span class="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Semana ${week} • Adicionar</span>
             <h3 class="text-lg font-bold text-white mt-0.5">${day} • ${meal}</h3>
           </div>
-          <button onclick="window.app.closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
+          <button onclick="window.__pendingMealContext = null; window.app.closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
         </div>
 
-        <div class="space-y-3">
-          <div>
-            <label class="block text-xs font-semibold text-slate-400 mb-1">Selecione o Ingrediente:</label>
-            <select id="new-meal-ing"
-                    onchange="window.app.updateNewMealIngredientPreview(this.value)"
-                    class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500">
-              ${sortedIngs.map((i) => `
-                <option value="${i.nome}">${i.nome} (${i.categoria}) — ${i.tamanho_pacote}${i.medida}</option>
-              `).join('')}
-            </select>
+        <!-- Campo de Busca em Destaque -->
+        <div class="space-y-2">
+          <label class="block text-xs font-bold text-slate-300">Buscar Ingrediente no Catálogo:</label>
+          <div class="relative">
+            <span class="absolute left-3.5 top-3 text-slate-400 text-sm">🔍</span>
+            <input type="text" id="add-meal-search-input"
+                   placeholder="Digite o nome (ex: Arroz, Carne, Feijão, Tomate)..."
+                   oninput="window.app.filterAddMealIngredients(this.value, '${day}', '${meal}', ${week})"
+                   class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500">
           </div>
 
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs text-slate-400 mb-1">Porção / Pessoa:</label>
-              <input type="number" step="any" min="0" id="new-meal-portion" value="${firstIng?.peso_porcao_base || 50}"
-                     class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm font-bold text-white focus:outline-none focus:border-emerald-500">
-            </div>
-            <div>
-              <label class="block text-xs text-slate-400 mb-1">Unidade:</label>
-              <input type="text" id="new-meal-unit" value="${firstIng?.medida || 'g'}" readonly
-                     class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-400">
-            </div>
+          <!-- Filtro rápido de categorias -->
+          <div id="add-meal-categories-bar" class="flex space-x-1.5 overflow-x-auto no-scrollbar py-1">
+            ${['Todos', 'Mercearia', 'Carnes/Ovos', 'Hortifrúti', 'Laticínios/Padaria', 'Outros'].map(cat => `
+              <button onclick="window.app.setAddMealCategory('${cat}', '${day}', '${meal}', ${week})"
+                      class="px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition ${cat === 'Todos' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">
+                ${cat}
+              </button>
+            `).join('')}
           </div>
         </div>
 
-        <div class="pt-2">
-          <button onclick="window.app.confirmAddMealItem('${day}', '${meal}', ${week})"
-                  class="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg transition">
-            Adicionar Ingrediente
+        <!-- Lista de Resultados Rolável -->
+        <div id="add-meal-results-container" class="max-h-48 overflow-y-auto space-y-1.5 p-1 bg-slate-950/70 rounded-xl border border-slate-800">
+          ${renderAddMealResultsHTML(sortedIngs, selectedMealIngredient)}
+        </div>
+
+        <!-- Painel do Ingrediente Selecionado e Porção -->
+        <div id="add-meal-selected-preview" class="p-3.5 bg-slate-800/70 border border-slate-700/80 rounded-xl space-y-2">
+          ${renderSelectedMealIngredientPreview(initialIng)}
+        </div>
+
+        <div class="pt-1">
+          <button id="add-meal-confirm-btn"
+                  onclick="window.app.confirmAddMealItem('${day}', '${meal}', ${week})"
+                  class="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-sm shadow-lg transition flex items-center justify-center gap-2">
+            <span>➕</span> <span>Adicionar ao Prato</span>
           </button>
         </div>
       </div>
     `);
   }
 
-  function updateNewMealIngredientPreview(ingName) {
-    const ing = getIngredientByName(ingName);
-    if (!ing) return;
-    const unitInput = document.getElementById('new-meal-unit');
-    const portionInput = document.getElementById('new-meal-portion');
-    if (unitInput) unitInput.value = ing.medida;
-    if (portionInput && (!portionInput.value || parseFloat(portionInput.value) === 0)) {
-      portionInput.value = ing.peso_porcao_base || 50;
+  function filterAddMealIngredients(query, day, meal, week) {
+    window.__addMealSearchQuery = query;
+    const cat = window.__addMealCategoryFilter || 'Todos';
+    const q = (query || '').toLowerCase().trim();
+
+    const filtered = state.ingredients
+      .filter(i => {
+        const matchCat = cat === 'Todos' || i.categoria === cat;
+        const matchQ = !q || i.nome.toLowerCase().includes(q);
+        return matchCat && matchQ;
+      })
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+
+    const listEl = document.getElementById('add-meal-results-container');
+    if (listEl) {
+      listEl.innerHTML = renderAddMealResultsHTML(filtered, selectedMealIngredient);
     }
+  }
+
+  function setAddMealCategory(cat, day, meal, week) {
+    window.__addMealCategoryFilter = cat;
+    const bar = document.getElementById('add-meal-categories-bar');
+    if (bar) {
+      const cats = ['Todos', 'Mercearia', 'Carnes/Ovos', 'Hortifrúti', 'Laticínios/Padaria', 'Outros'];
+      bar.innerHTML = cats.map(c => `
+        <button onclick="window.app.setAddMealCategory('${c}', '${day}', '${meal}', ${week})"
+                class="px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition ${c === cat ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">
+          ${c}
+        </button>
+      `).join('');
+    }
+    filterAddMealIngredients(window.__addMealSearchQuery || '', day, meal, week);
+  }
+
+  function selectMealIngredient(ingName) {
+    selectedMealIngredient = ingName;
+    const ing = getIngredientByName(ingName);
+    const previewEl = document.getElementById('add-meal-selected-preview');
+    if (previewEl && ing) {
+      previewEl.innerHTML = renderSelectedMealIngredientPreview(ing);
+    }
+    filterAddMealIngredients(window.__addMealSearchQuery || '', '', '', 1);
+  }
+
+  function updateNewMealCostPreview() {
+    const ingName = document.getElementById('new-meal-ing')?.value;
+    const portion = parseFloat(document.getElementById('new-meal-portion')?.value) || 0;
+    const ing = getIngredientByName(ingName);
+    const costEl = document.getElementById('new-meal-cost-preview');
+    if (ing && costEl) {
+      const totalFamilyQtd = portion * (state.familyMembers || 3);
+      const cost = (totalFamilyQtd * (ing.preco_pacote || 0)) / (ing.tamanho_pacote || 1);
+      costEl.textContent = `R$ ${cost.toFixed(2).replace('.', ',')}`;
+    }
+  }
+
+  function updateNewMealIngredientPreview(ingName) {
+    selectMealIngredient(ingName);
   }
 
   function confirmAddMealItem(day, meal, week = state.activeWeek) {
@@ -3795,19 +4036,24 @@
   }
 
   // --- INGREDIENT CATALOG MODALS ---
-  function openAddIngredientModal() {
+  function openAddIngredientModal(prefilledName = '') {
+    const defaultName = (typeof prefilledName === 'string' ? prefilledName : '').trim();
     renderModal(`
       <div class="space-y-4">
         <div class="flex items-center justify-between pb-3 border-b border-slate-800">
-          <h3 class="text-lg font-bold text-white">Cadastrar Novo Ingrediente</h3>
+          <div>
+            <h3 class="text-lg font-bold text-white">Cadastrar Novo Ingrediente</h3>
+            <p class="text-xs text-slate-400">Preencha os dados do novo ingrediente para o catálogo.</p>
+          </div>
           <button onclick="window.app.closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
         </div>
 
         <div class="space-y-3">
           <div>
-            <label class="block text-xs text-slate-400 mb-1">Nome:</label>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Nome do Ingrediente:</label>
             <input type="text" id="new-ing-name" placeholder="Ex: Arroz Granjeiro"
-                   class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                   value="${defaultName ? defaultName.replace(/"/g, '&quot;') : ''}"
+                   class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 font-bold">
           </div>
 
           <div class="grid grid-cols-2 gap-3">
@@ -3902,6 +4148,14 @@
     renderApp();
     closeModal();
     showToast(`Ingrediente ${name} adicionado com sucesso!`, 'success');
+
+    // Se o usuário veio de uma refeição do cardápio (+ Item), reabre o modal já com ele selecionado!
+    if (window.__pendingMealContext) {
+      const { day, meal, week } = window.__pendingMealContext;
+      setTimeout(() => {
+        openAddMealItemModal(day, meal, week, newIng.nome);
+      }, 150);
+    }
   }
 
   function openEditIngredientModal(ingId) {
@@ -5218,6 +5472,16 @@
     testSupabaseConnection,
     uploadToSupabase,
     downloadFromSupabase,
+
+    // Catálogo Search & Filter
+    handleIngredientSearch,
+    setIngredientCategoryFilter,
+
+    // Cardápio Add Meal Search & Selection
+    filterAddMealIngredients,
+    setAddMealCategory,
+    selectMealIngredient,
+    updateNewMealCostPreview,
 
     closeModal,
     renderApp
